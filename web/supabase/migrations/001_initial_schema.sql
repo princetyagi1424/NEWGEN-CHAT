@@ -92,7 +92,10 @@ create policy "devices_own" on public.devices for all to authenticated using (au
 create policy "conv_select" on public.conversations for select to authenticated using (
   exists (select 1 from public.conversation_members m where m.conversation_id = id and m.user_id = auth.uid())
 );
-create policy "conv_insert" on public.conversations for insert to authenticated with check (auth.uid() = created_by);
+-- Conversation creation and message writes are performed by authenticated server APIs.
+-- Do not permit direct browser writes that bypass API validation and authorization.
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.conversations FROM anon, authenticated;
+GRANT SELECT ON TABLE public.conversations TO authenticated;
 
 -- The browser may read only its own membership row. Authorized server APIs
 -- return group member lists using the server-only service role.
@@ -108,9 +111,8 @@ GRANT SELECT ON TABLE public.conversation_members TO authenticated;
 create policy "messages_select" on public.messages for select to authenticated using (
   exists (select 1 from public.conversation_members m where m.conversation_id = messages.conversation_id and m.user_id = auth.uid())
 );
-create policy "messages_insert" on public.messages for insert to authenticated with check (
-  auth.uid() = sender_id and exists (select 1 from public.conversation_members m where m.conversation_id = conversation_id and m.user_id = auth.uid())
-);
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.messages FROM anon, authenticated;
+GRANT SELECT ON TABLE public.messages TO authenticated;
 
 create policy "receipts_own" on public.message_receipts for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "push_own" on public.push_subscriptions for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);

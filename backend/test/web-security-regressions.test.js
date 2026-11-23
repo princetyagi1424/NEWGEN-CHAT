@@ -49,3 +49,11 @@ test('browser membership reads are self-only and avoid recursive RLS subqueries'
   assert.doesNotMatch(policy, /FROM public\.conversation_members/i);
   assert.doesNotMatch(migratedPolicy, /FROM public\.conversation_members/i);
 });
+
+test('conversation and message writes cannot bypass the authenticated server APIs', () => {
+  assert.doesNotMatch(schema, /create policy "conv_insert"/i);
+  assert.doesNotMatch(schema, /create policy "messages_insert"/i);
+  assert.match(schema, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.conversations FROM anon, authenticated/i);
+  assert.match(schema, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.messages FROM anon, authenticated/i);
+  assert.match(schema, /messages_select[\s\S]*?messages\.conversation_id/);
+});
