@@ -68,13 +68,13 @@ import com.newgenchat.app.security.SessionStore
 import java.text.DateFormat
 import java.util.Date
 
-private val Ink = Color(0xFF0B1220)
-private val Panel = Color(0xFF121D2E)
-private val Panel2 = Color(0xFF1A2940)
-private val Mint = Color(0xFF43D9A3)
-private val Muted = Color(0xFF9AAAC0)
-private val White = Color(0xFFF4F7FB)
-private val Danger = Color(0xFFFF8585)
+private val Ink = Color(0xFFF4F7FC)
+private val Panel = Color(0xFFFFFFFF)
+private val Panel2 = Color(0xFFEAF0F8)
+private val Mint = Color(0xFF2563EB)
+private val Muted = Color(0xFF64748B)
+private val White = Color(0xFF14213D)
+private val Danger = Color(0xFFDC2626)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,9 +94,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun NewgenTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = darkColorScheme(
+        colorScheme = lightColorScheme(
             primary = Mint,
-            onPrimary = Ink,
+            onPrimary = Color.White,
             background = Ink,
             surface = Panel,
             onSurface = White,
@@ -187,6 +187,7 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var recoveryCode by remember { mutableStateOf("") }
+    var securityAnswer by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var isRegister by remember { mutableStateOf(false) }
     var recoverMode by remember { mutableStateOf(false) }
@@ -216,6 +217,15 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
             OutlinedTextField(value = newPassword, onValueChange = { newPassword = it }, modifier = Modifier.fillMaxWidth(), label = { Text("New password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
         } else {
             OutlinedTextField(value = password, onValueChange = { password = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, shape = RoundedCornerShape(14.dp))
+            if (isRegister) {
+                Spacer(Modifier.height(10.dp))
+                Text("Account recovery question", color = Muted, fontSize = 12.sp)
+                Text("What was the name of your first school?", color = White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Your answer (case-insensitive)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+            }
+            if (recoverMode) {
+                OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Answer: What was the name of your first school?") }, singleLine = true)
+            }
         }
         Spacer(Modifier.height(16.dp))
         error?.let { Text(it, color = Danger, fontSize = 12.sp); Spacer(Modifier.height(8.dp)) }
@@ -228,15 +238,16 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
                     try {
                         when {
                             recoverMode -> {
-                                NewgenApi.recoverPassword(username, recoveryCode, newPassword)
+                                if (recoveryCode.isNotBlank()) NewgenApi.recoverPassword(username, recoveryCode, newPassword) else NewgenApi.recoverPasswordWithSecurityAnswer(username, securityAnswer, newPassword)
                                 recoverMode = false
                                 password = ""
                                 recoveryCode = ""
+                                securityAnswer = ""
                                 newPassword = ""
                                 info = "Password reset complete. Sign in with your new password. Your old sessions are revoked."
                             }
                             else -> {
-                                val session = if (isRegister) NewgenApi.register(username, password) else NewgenApi.login(username, password)
+                                val session = if (isRegister) NewgenApi.register(username, password, securityAnswer) else NewgenApi.login(username, password)
                                 onAuthenticated(session)
                             }
                         }
@@ -246,7 +257,7 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
                 }
             },
             modifier = Modifier.fillMaxWidth().height(54.dp),
-            enabled = !busy && username.length >= 3 && if (recoverMode) recoveryCode.length >= 20 && newPassword.length >= 10 else password.length >= 10,
+            enabled = !busy && username.length >= 3 && if (recoverMode) ((recoveryCode.length >= 20 || securityAnswer.length >= 2) && newPassword.length >= 10) else password.length >= 10 && (!isRegister || securityAnswer.trim().length >= 2),
             shape = RoundedCornerShape(16.dp)
         ) {
             Text(
@@ -262,7 +273,7 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
         TextButton(onClick = { recoverMode = !recoverMode; error = null; info = null }) {
             Text(if (recoverMode) "Back to login" else "Forgot password? Use recovery code", color = Muted)
         }
-        Text("Use at least 10 characters for your account password.", color = Muted, fontSize = 11.sp)
+        Text("Use at least 10 characters for your account password. Keep your recovery answer private; it cannot unlock chat encryption.", color = Muted, fontSize = 11.sp)
     }
 }
 
