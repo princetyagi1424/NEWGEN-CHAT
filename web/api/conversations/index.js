@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     const user = await getUser(req, db)
     if (!user) return sendError(res, 401, 'Authentication required')
     if (req.method === 'GET') {
-      const { data: memberships, error: membershipError } = await db.from('conversation_members').select('conversation_id,role,encrypted_conversation_key').eq('user_id', user.id)
+      const { data: memberships, error: membershipError } = await db.from('conversation_members').select('conversation_id,role').eq('user_id', user.id)
       if (membershipError) throw membershipError
       const ids = (memberships || []).map(x => x.conversation_id)
       if (!ids.length) return res.status(200).json({ conversations: [] })
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
           const { data: p } = await db.from('app_users').select('id,username').eq('id', otherId).maybeSingle()
           if (p) otherProfile = { id: p.id, username: p.username, display_name: p.username, avatar_url: null, bio: null, created_at: '', updated_at: '', last_seen_at: null }
         }
-        const { data: lastRows, error: lastError } = await db.from('messages').select('*').eq('conversation_id', conv.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(1)
+        const { data: lastRows, error: lastError } = await db.from('messages').select('id,conversation_id,sender_id,ciphertext,iv,content_type,created_at,expires_at,deleted_at').eq('conversation_id', conv.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(1)
         if (lastError) throw lastError
         output.push({ ...conv, members: members || [], otherProfile, lastMessage: lastRows?.[0] || null })
       }
@@ -40,11 +40,13 @@ export default async function handler(req, res) {
     }
     if (req.method === 'POST') {
       const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 80) : ''
-      const key = typeof req.body?.conversation_key === 'string' ? req.body.conversation_key : ''
-      if (!name || !key || key.length > 4096) return sendError(res, 400, 'Group name and conversation key are required')
+      if (!name) return sendError(res, 400, 'Group name is required')
+      if ('conversation_key' in (req.body || {}) || 'passkey' in (req.body || {})) {
+        return sendError(res, 400, 'Chat secrets must never be sent to the server')
+      }
       const { data: conv, error } = await db.from('conversations').insert({ type: 'group', name, created_by: user.id }).select('*').single()
       if (error) throw error
-      const { error: memberError } = await db.from('conversation_members').insert({ conversation_id: conv.id, user_id: user.id, role: 'owner', encrypted_conversation_key: key })
+      const { error: memberError } = await db.from('conversation_members').insert({ conversation_id: conv.id, user_id: user.id, role: 'owner', encrypted_conversation_key: null })
       if (memberError) {
         await db.from('conversations').delete().eq('id', conv.id)
         throw memberError
