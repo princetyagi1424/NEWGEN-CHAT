@@ -236,7 +236,7 @@ export default function ChatApp() {
       setConversations(previous => [next, ...previous.filter(item => item.id !== conv.id)])
       setActiveId(conv.id)
       setPasskey(null)
-      setShowPasskeyDialog(true)
+      setShowPasskeyDialog(false)
       setSearch('')
       setSearchResults([])
       setActiveTab('chats')
@@ -322,7 +322,7 @@ export default function ChatApp() {
     setActiveId(id)
     setPasskeyEntry('')
     setPasskeyError('')
-    setShowPasskeyDialog(true)
+    setShowPasskeyDialog(false)
   }
 
   function leaveConversation() {
@@ -474,7 +474,7 @@ export default function ChatApp() {
                 </>
               ) : (
                 <>
-                  <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8"ntain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
+                  <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
                     <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-violet-500"/> Messages decrypt only on this device</div>
                     {messages.map(m=>{const mine=m.sender_id===user?.id;return <div key={m.id} className={`message-enter flex ${mine?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}><div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??'✦ ✦ ✦ ✦ ✦ ✦'}</span></div><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}{mine&&<ShieldCheck className="h-3 w-3"/>}</div></div></div>})}
                     <div ref={bottomRef}/>
