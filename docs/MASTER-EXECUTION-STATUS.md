@@ -1,6 +1,6 @@
 # NEWGEN CHAT — Master Execution Status
 
-Last updated: 2026-11-23 (UTC; resumed execution)
+Last updated: 2026-11-23 (UTC; security hardening checkpoint)
 Working branch: `feature/passkey-privacy-social-ui`
 Pull request: https://github.com/princetyagi1424/NEWGEN-CHAT/pull/2
 
@@ -44,6 +44,11 @@ Workflow run: https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/451858
 
 ## Fixes applied
 
+- [x] Web auth access token and user cache moved from persistent `localStorage` to tab-scoped `sessionStorage`; legacy persistent token/user entries are removed on app initialization.
+- [x] Sign-out clears tab-scoped auth state and locally persisted device/meta data.
+- [x] IndexedDB schema advanced to version 3; legacy plaintext decrypted-message cache and plaintext conversation-key stores are deleted during upgrade and are no longer declared or written.
+- [x] Added `backend/test/web-browser-storage-security.test.js` to enforce no plaintext message/key persistence and tab-scoped token handling.
+
 - [x] Restored the complete web ChatApp component render tree after the first attempted boundary edit was shown by CI to have selected an effect cleanup return rather than the component render. The corrected render was verified by a successful Vite production build.
 - [x] Updated the Android plugin contract test to assert the newly required Kotlin Android plugin alias. A follow-up run confirms all 54 backend tests pass.
 
@@ -54,7 +59,8 @@ Workflow run: https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/451858
 - [x] Extended the Android Gradle contract test to require the root plugin declaration.
 - [x] Web production build passed on GitHub Actions run for commit `150415a5f1314ab60280e9e707b661b223d05b8e` (Vite production build completed successfully).
 - [x] Backend Node test suite passed on GitHub Actions run for commit `150415a5f1314ab60280e9e707b661b223d05b8e` (54 tests, 54 passed, 0 failed).
-- [ ] Android debug build is being re-run on GitHub Actions for commit `6ab84c79754451911bdcdb88fc7993c2d13a076e`; do not mark passed until the assemble step completes.
+- [ ] Android debug build after root Kotlin plugin version declaration is still pending/in progress in GitHub Actions; do not mark passed until `:app:assembleDebug` succeeds.
+- [ ] Newly added browser storage security tests have been committed; their GitHub Actions run is queued/in progress and must be checked before marking passed.
 - [x] Web production build passed on commit `6ab84c79754451911bdcdb88fc7993c2d13a076e`.
 - [x] Backend test job passed on commit `6ab84c79754451911bdcdb88fc7993c2d13a076e`.
 
@@ -67,6 +73,7 @@ Legend: [x] existing implementation evidence found; [ ] incomplete, unverified, 
 - [x] Existing docs and CI configuration inspected.
 - [x] Existing CI failures identified from job logs.
 - [ ] Full source-level security and API audit completed.
+- [x] Initial web browser-storage audit identified plaintext message cache, plaintext conversation-key store and persistent localStorage bearer token; mitigations committed (see Phase 11).
 
 ### Phase 2 — UI/UX
 - [x] Initial WhatsApp/Instagram-inspired web chat redesign exists.
@@ -128,7 +135,7 @@ Legend: [x] existing implementation evidence found; [ ] incomplete, unverified, 
 
 ### Phase 12 — Testing
 - [x] Existing backend CI test job passed on commit `da6e4d8` (not full live integration coverage).
-- [ ] Reverify backend tests on current head.
+- [ ] Reverify backend tests on current head, including new browser-storage security contracts.
 - [ ] Web build and TypeScript validation.
 - [ ] Android Gradle debug build and Compose/UI tests.
 - [ ] Two-account and multi-device integration tests.
@@ -159,10 +166,12 @@ Legend: [x] existing implementation evidence found; [ ] incomplete, unverified, 
 ## Exact next steps
 
 1. Verify Android debug build after declaring Kotlin Android plugin at the root; inspect logs if it still fails.
-2. Continue source-level security/API audit of authentication, media access and passkey handling.
-3. Implement the next independently verifiable missing feature slice without advertising placeholders as working.
-4. Run tests/builds, update this status file, commit and verify CI after each meaningful phase.
-5. Keep PR #2 synchronized; do not merge.
+2. Verify the browser-storage security contract tests and web production build on latest commit.
+3. Verify the Android build after root plugin declaration; inspect current job logs if still failing.
+4. Continue source-level security/API audit of authentication, media access and passkey handling.
+5. Implement the next independently verifiable missing feature slice without advertising placeholders as working.
+6. Run tests/builds, update this status file, commit and verify CI after each meaningful phase.
+7. Keep PR #2 synchronized; do not merge.
 
 ## Test reporting rules
 
