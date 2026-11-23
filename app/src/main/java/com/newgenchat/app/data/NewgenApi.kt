@@ -53,8 +53,8 @@ object NewgenApi {
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 15_000
 
-    suspend fun register(username: String, password: String): AuthSession =
-        authenticate("/api/auth/register", username, password)
+    suspend fun register(username: String, password: String, securityAnswer: String): AuthSession =
+        authenticate("/api/auth/register", username, password, securityAnswer)
 
     suspend fun login(username: String, password: String): AuthSession =
         authenticate("/api/auth/login", username, password)
@@ -66,11 +66,12 @@ object NewgenApi {
         }
     }
 
-    private suspend fun authenticate(path: String, username: String, password: String): AuthSession =
+    private suspend fun authenticate(path: String, username: String, password: String, securityAnswer: String? = null): AuthSession =
         withContext(Dispatchers.IO) {
             val body = JSONObject()
                 .put("username", username.trim())
                 .put("password", password)
+            if (securityAnswer != null) body.put("securityQuestion", "What was the name of your first school?").put("securityAnswer", securityAnswer.trim())
             val response = request(path, "POST", body, null)
             val user = response.getJSONObject("user")
             val session = AuthSession(
@@ -310,10 +311,13 @@ object NewgenApi {
 
     suspend fun recoverPassword(username: String, recoveryCode: String, newPassword: String) =
         withContext(Dispatchers.IO) {
-            val body = JSONObject()
-                .put("username", username)
-                .put("recoveryCode", recoveryCode)
-                .put("newPassword", newPassword)
+            val body = JSONObject().put("username", username).put("recoveryCode", recoveryCode).put("newPassword", newPassword)
+            request("/api/account/recover-password", "POST", body, null)
+        }
+
+    suspend fun recoverPasswordWithSecurityAnswer(username: String, answer: String, newPassword: String) =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject().put("username", username).put("securityAnswer", answer.trim()).put("newPassword", newPassword)
             request("/api/account/recover-password", "POST", body, null)
         }
 
