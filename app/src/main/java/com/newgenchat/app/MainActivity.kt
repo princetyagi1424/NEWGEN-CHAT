@@ -1179,7 +1179,7 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
                     error?.let { Text(it, color = Danger, fontSize = 12.sp) }
                 }
             }
-else {
+        } else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (loading && messages.isEmpty()) item { Text("Loading encrypted messages…", color = Muted) }
                 if (!loading && messages.isEmpty()) item { Text("No messages yet. Send the first encrypted message.", color = Muted, fontSize = 13.sp) }
