@@ -66,6 +66,10 @@ export default async function handler(req, res) {
     return sendError(res, 400, 'Unsupported action.')
   } catch (error) {
     console.error('Chat PIN API error:', error.message)
-    return sendError(res, 500, 'Chat PIN service is temporarily unavailable')
+    const code = error?.code || error?.cause?.code
+    if (code === '42703' || code === '42P01' || code === 'PGRST204' || code === 'PGRST205') {
+      return sendError(res, 503, 'Chat PIN database setup is incomplete. Apply web/database/migrations/2026-11-23-chat-unlock-pin.sql in the Supabase SQL Editor, then retry.')
+    }
+    return sendError(res, 503, 'Chat PIN service is temporarily unavailable. Check the Vercel server environment variables SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and JWT_SECRET.')
   }
 }
