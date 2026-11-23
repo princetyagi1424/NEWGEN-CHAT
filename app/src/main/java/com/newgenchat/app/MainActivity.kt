@@ -11,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -68,13 +69,13 @@ import com.newgenchat.app.security.SessionStore
 import java.text.DateFormat
 import java.util.Date
 
-private val Ink = Color(0xFFF4F7FC)
+private val Ink = Color(0xFFF8F6FC)
 private val Panel = Color(0xFFFFFFFF)
-private val Panel2 = Color(0xFFEAF0F8)
-private val Mint = Color(0xFF2563EB)
-private val Muted = Color(0xFF64748B)
-private val White = Color(0xFF14213D)
-private val Danger = Color(0xFFDC2626)
+private val Panel2 = Color(0xFFF1ECFA)
+private val Mint = Color(0xFF7652E8)
+private val Muted = Color(0xFF89839B)
+private val White = Color(0xFF211A35)
+private val Danger = Color(0xFFDC4268)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -196,84 +197,90 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
     var info by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 26.dp).imePadding(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.Start
+    Box(
+        Modifier.fillMaxSize().background(Color(0xFFF8F5FF)).imePadding(),
+        contentAlignment = Alignment.Center
     ) {
-        Box(Modifier.size(64.dp).clip(RoundedCornerShape(20.dp)).background(Panel2), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.Lock, null, tint = Mint, modifier = Modifier.size(32.dp))
-        }
-        Spacer(Modifier.height(24.dp))
-        Text("NEWGEN CHAT", color = White, fontSize = 29.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
-        Text("Your conversations. Your control.", color = Muted, fontSize = 14.sp)
-        Spacer(Modifier.height(28.dp))
-        OutlinedTextField(value = username, onValueChange = { username = it.trim() }, modifier = Modifier.fillMaxWidth(), label = { Text("Username") }, placeholder = { Text("your_unique_username") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-        Spacer(Modifier.height(12.dp))
-
-        if (recoverMode) {
-            Text("Recover with your saved recovery code OR your security answer.", color = Muted, fontSize = 12.sp)
-            OutlinedTextField(value = recoveryCode, onValueChange = { recoveryCode = it.trim() }, modifier = Modifier.fillMaxWidth(), label = { Text("One-time recovery code (optional)") }, singleLine = true)
-            Text("OR · What was the name of your first school?", color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Security answer (optional)") }, singleLine = true)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(value = newPassword, onValueChange = { newPassword = it }, modifier = Modifier.fillMaxWidth(), label = { Text("New password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-        } else {
-            OutlinedTextField(value = password, onValueChange = { password = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, shape = RoundedCornerShape(14.dp))
-            if (isRegister) {
-                Spacer(Modifier.height(10.dp))
-                Text("Account recovery question", color = Muted, fontSize = 12.sp)
-                Text("What was the name of your first school?", color = White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Your answer (case-insensitive)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        error?.let { Text(it, color = Danger, fontSize = 12.sp); Spacer(Modifier.height(8.dp)) }
-        info?.let { Text(it, color = Mint, fontSize = 12.sp); Spacer(Modifier.height(8.dp)) }
-
-        Button(
-            onClick = {
-                busy = true; error = null; info = null
-                scope.launch {
-                    try {
-                        when {
-                            recoverMode -> {
-                                if (recoveryCode.isNotBlank()) NewgenApi.recoverPassword(username, recoveryCode, newPassword) else NewgenApi.recoverPasswordWithSecurityAnswer(username, securityAnswer, newPassword)
-                                recoverMode = false
-                                password = ""
-                                recoveryCode = ""
-                                securityAnswer = ""
-                                newPassword = ""
-                                info = "Password reset complete. Sign in with your new password. Your old sessions are revoked."
-                            }
-                            else -> {
-                                val session = if (isRegister) NewgenApi.register(username, password, securityAnswer) else NewgenApi.login(username, password)
-                                onAuthenticated(session)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        error = e.message ?: "Unable to connect to the NEWGEN CHAT server"
-                    } finally { busy = false }
-                }
-            },
-            modifier = Modifier.fillMaxWidth().height(54.dp),
-            enabled = !busy && username.length >= 3 && if (recoverMode) ((recoveryCode.length >= 20 || securityAnswer.length >= 2) && newPassword.length >= 10) else password.length >= 10 && (!isRegister || securityAnswer.trim().length >= 2),
-            shape = RoundedCornerShape(16.dp)
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                when { busy -> "Please wait…"; recoverMode -> "Reset password"; isRegister -> "Create account"; else -> "Login" },
-                fontWeight = FontWeight.Bold
-            )
-        }
-        if (!recoverMode) {
-            TextButton(onClick = { isRegister = !isRegister; error = null; info = null }) {
-                Text(if (isRegister) "Already registered? Login" else "Create account", color = Mint)
+            Box(Modifier.size(68.dp).clip(RoundedCornerShape(24.dp)).background(Mint), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.ChatBubble, null, tint = Color.White, modifier = Modifier.size(34.dp))
             }
+            Spacer(Modifier.height(16.dp))
+            Text("NEWGEN CHAT", color = White, fontSize = 27.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = .4.sp)
+            Text("Your people. Your moments. Your space.", color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.height(28.dp))
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(Panel).padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(13.dp)
+            ) {
+                Text(
+                    when { recoverMode -> "Recover your account"; isRegister -> "Create your account"; else -> "Welcome back" },
+                    color = White, fontSize = 23.sp, fontWeight = FontWeight.Bold
+                )
+                Text("Sign in to continue your private conversations.", color = Muted, fontSize = 13.sp)
+                OutlinedTextField(
+                    value = username, onValueChange = { username = it.trim() },
+                    modifier = Modifier.fillMaxWidth(), label = { Text("Username") },
+                    placeholder = { Text("your_username") }, singleLine = true,
+                    shape = RoundedCornerShape(16.dp)
+                )
+                if (recoverMode) {
+                    Text("Use your recovery code OR your security answer.", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(value = recoveryCode, onValueChange = { recoveryCode = it.trim() }, modifier = Modifier.fillMaxWidth(), label = { Text("One-time recovery code (optional)") }, singleLine = true, shape = RoundedCornerShape(16.dp))
+                    Text("OR · What was the name of your first school?", color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Security answer (optional)") }, singleLine = true, shape = RoundedCornerShape(16.dp))
+                    OutlinedTextField(value = newPassword, onValueChange = { newPassword = it }, modifier = Modifier.fillMaxWidth(), label = { Text("New password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, shape = RoundedCornerShape(16.dp))
+                } else {
+                    OutlinedTextField(value = password, onValueChange = { password = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, shape = RoundedCornerShape(16.dp))
+                    if (isRegister) {
+                        Text("Account recovery question", color = Muted, fontSize = 12.sp)
+                        Text("What was the name of your first school?", color = White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Your answer") }, singleLine = true, shape = RoundedCornerShape(16.dp))
+                    }
+                }
+                error?.let { Text(it, color = Danger, fontSize = 12.sp) }
+                info?.let { Text(it, color = Color(0xFF15966B), fontSize = 12.sp) }
+                Button(
+                    onClick = {
+                        busy = true; error = null; info = null
+                        scope.launch {
+                            try {
+                                when {
+                                    recoverMode -> {
+                                        if (recoveryCode.isNotBlank()) NewgenApi.recoverPassword(username, recoveryCode, newPassword) else NewgenApi.recoverPasswordWithSecurityAnswer(username, securityAnswer, newPassword)
+                                        recoverMode = false; password = ""; recoveryCode = ""; securityAnswer = ""; newPassword = ""
+                                        info = "Password reset complete. Sign in with your new password."
+                                    }
+                                    else -> {
+                                        val authenticated = if (isRegister) NewgenApi.register(username, password, securityAnswer) else NewgenApi.login(username, password)
+                                        onAuthenticated(authenticated)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                error = e.message ?: "Unable to connect to the NEWGEN CHAT server"
+                            } finally { busy = false }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    enabled = !busy && username.length >= 3 && if (recoverMode) ((recoveryCode.length >= 20 || securityAnswer.length >= 2) && newPassword.length >= 10) else password.length >= 10 && (!isRegister || securityAnswer.trim().length >= 2),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Mint)
+                ) {
+                    Text(when { busy -> "Please wait…"; recoverMode -> "Reset password"; isRegister -> "Create account"; else -> "Sign in" }, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            TextButton(onClick = { isRegister = !isRegister; recoverMode = false; error = null; info = null }) {
+                Text(if (isRegister) "Already have an account? Sign in" else "No account? Create account", color = Mint, fontWeight = FontWeight.SemiBold)
+            }
+            TextButton(onClick = { recoverMode = !recoverMode; error = null; info = null }) {
+                Text(if (recoverMode) "Back to sign in" else "Forgot password?", color = Muted)
+            }
+            Text("Your account password and chat passkeys serve different purposes.", color = Muted, fontSize = 10.sp)
         }
-        TextButton(onClick = { recoverMode = !recoverMode; error = null; info = null }) {
-            Text(if (recoverMode) "Back to login" else "Forgot password? Recover with code or security answer", color = Muted)
-        }
-        Text("Use at least 10 characters for your account password. Keep your recovery answer private; it cannot unlock chat encryption.", color = Muted, fontSize = 11.sp)
     }
 }
 
@@ -317,11 +324,18 @@ private fun MainHome(
         busy = false
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxSize().background(Color(0xFFFCFAFF))) {
+        Row(
+            Modifier.fillMaxWidth().background(Panel).padding(horizontal = 20.dp, vertical = 17.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(42.dp).clip(RoundedCornerShape(15.dp)).background(Mint), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.ChatBubble, null, tint = Color.White, modifier = Modifier.size(23.dp))
+            }
+            Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
-                Text("NEWGEN CHAT", color = White, fontWeight = FontWeight.ExtraBold, fontSize = 21.sp, letterSpacing = .6.sp)
-                Text("@${session.username} · private session", color = Muted, fontSize = 11.sp)
+                Text("NEWGEN", color = White, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, letterSpacing = -.3.sp)
+                Text("@${session.username} · your private circle", color = Muted, fontSize = 11.sp)
             }
             IconButton(onClick = onRefresh) { Icon(Icons.Default.Refresh, "Refresh", tint = Muted) }
             IconButton(onClick = logoutAction) { Text("↪", color = Muted, fontSize = 22.sp) }
@@ -360,72 +374,127 @@ private fun ChatsPane(
     var selectedMembers by remember { mutableStateOf(setOf<String>()) }
     var creating by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var search by remember { mutableStateOf("") }
+    var showCreateGroup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val filteredFriends = friends.filter { it.username.contains(search.trim(), ignoreCase = true) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-        Text("Messages", color = White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        if (loading && friends.isEmpty() && groups.isEmpty()) Text("Loading your chats…", color = Muted)
-        if (friends.isEmpty() && groups.isEmpty() && !loading) Text("No chats yet. Add a friend in the Friends tab to start.", color = Muted, fontSize = 13.sp)
-        LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(friends, key = { "friend-${it.id}" }) { friend ->
-                ChatListRow(friend.username, "Direct conversation", onClick = { onOpenChat(ChatTarget(friend.id, friend.username)) })
+        OutlinedTextField(
+            value = search, onValueChange = { search = it },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            placeholder = { Text("Search chats…") },
+            leadingIcon = { Text("⌕", color = Muted, fontSize = 24.sp) },
+            singleLine = true, shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = Color(0xFFF2EFF8),
+                focusedContainerColor = Color.White,
+                unfocusedBorderColor = Color(0xFFECE6F5),
+                focusedBorderColor = Mint
+            )
+        )
+        Spacer(Modifier.height(18.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Your circle", color = White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("${friends.size} friends", color = Muted, fontSize = 11.sp)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(58.dp)) {
+                Box(Modifier.size(54.dp).clip(CircleShape).background(Panel2), contentAlignment = Alignment.Center) {
+                    Text("+", color = Mint, fontSize = 27.sp, fontWeight = FontWeight.Light)
+                }
+                Spacer(Modifier.height(5.dp))
+                Text("Your story", color = Muted, fontSize = 10.sp, maxLines = 1)
             }
-            items(groups, key = { "group-${it.id}" }) { group ->
+            friends.take(12).forEach { friend ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(58.dp).clickable { onOpenChat(ChatTarget(friend.id, friend.username)) }) {
+                    Box(Modifier.size(54.dp).clip(CircleShape).background(Mint).padding(2.dp).clip(CircleShape).background(Panel), contentAlignment = Alignment.Center) {
+                        Text(friend.username.take(1).uppercase(), color = Mint, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(5.dp))
+                    Text(friend.username, color = Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Messages", color = White, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = { showCreateGroup = !showCreateGroup }) {
+                Text(if (showCreateGroup) "Close" else "+ New group", color = Mint, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+        if (loading && friends.isEmpty() && groups.isEmpty()) Text("Loading your chats…", color = Muted, fontSize = 13.sp)
+        LazyColumn(Modifier.weight(1f, fill = true), verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+            items(filteredFriends, key = { "friend-${it.id}" }) { friend ->
+                ChatListRow(friend.username, "Private conversation", onClick = { onOpenChat(ChatTarget(friend.id, friend.username)) })
+            }
+            items(groups.filter { it.name.contains(search.trim(), ignoreCase = true) }, key = { "group-${it.id}" }) { group ->
                 ChatListRow(group.name, "Group conversation", onClick = { onOpenChat(ChatTarget(group.id, group.name, true)) })
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        HorizontalDivider(color = Panel2)
-        Spacer(Modifier.height(10.dp))
-        Text("Create a group", color = White, fontWeight = FontWeight.Bold)
-        OutlinedTextField(value = groupName, onValueChange = { groupName = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Group name") }, singleLine = true)
-        if (friends.isNotEmpty()) {
-            Text("Choose friends", color = Muted, fontSize = 12.sp)
-            friends.forEach { friend ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = friend.id in selectedMembers, onCheckedChange = { checked ->
-                        selectedMembers = if (checked) selectedMembers + friend.id else selectedMembers - friend.id
-                    })
-                    Text(friend.username, color = White)
+            if (filteredFriends.isEmpty() && groups.none { it.name.contains(search.trim(), ignoreCase = true) } && !loading) {
+                item {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Your conversations start here", color = White, fontWeight = FontWeight.Bold)
+                        Text("Find friends and build your private circle.", color = Muted, fontSize = 12.sp)
+                    }
                 }
             }
         }
-        message?.let { Text(it, color = Mint, fontSize = 12.sp) }
-        Button(
-            onClick = {
-                creating = true; message = null
-                scope.launch {
-                    try {
-                        NewgenApi.createGroup(session.accessToken, groupName.trim(), selectedMembers.toList())
-                        groupName = ""; selectedMembers = emptySet()
-                        message = "Group created. Members must share the same group passkey securely out of band."
-                        onRefresh()
-                    } catch (e: Exception) { message = e.message ?: "Could not create group" }
-                    finally { creating = false }
+        if (showCreateGroup) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Panel).padding(14.dp)) {
+                Text("Create a group", color = White, fontWeight = FontWeight.Bold)
+                OutlinedTextField(value = groupName, onValueChange = { groupName = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Group name") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                if (friends.isNotEmpty()) {
+                    Text("Choose members", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+                    friends.take(5).forEach { friend ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = friend.id in selectedMembers, onCheckedChange = { checked ->
+                                selectedMembers = if (checked) selectedMembers + friend.id else selectedMembers - friend.id
+                            })
+                            Text(friend.username, color = White, fontSize = 13.sp)
+                        }
+                    }
                 }
-            },
-            enabled = !creating && groupName.isNotBlank(),
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(if (creating) "Creating…" else "Create group") }
-        Spacer(Modifier.height(8.dp))
+                message?.let { Text(it, color = Mint, fontSize = 11.sp) }
+                Button(
+                    onClick = {
+                        creating = true; message = null
+                        scope.launch {
+                            try {
+                                NewgenApi.createGroup(session.accessToken, groupName.trim(), selectedMembers.toList())
+                                groupName = ""; selectedMembers = emptySet(); showCreateGroup = false
+                                message = "Group created. Members must share the same group passkey securely out of band."
+                                onRefresh()
+                            } catch (e: Exception) { message = e.message ?: "Could not create group" }
+                            finally { creating = false }
+                        }
+                    },
+                    enabled = !creating && groupName.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Mint)
+                ) { Text(if (creating) "Creating…" else "Create group") }
+            }
+        }
     }
 }
 
 @Composable
 private fun ChatListRow(name: String, subtitle: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Panel).clickable(onClick = onClick).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp)).background(Panel)
+            .clickable(onClick = onClick).padding(horizontal = 13.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(42.dp).clip(CircleShape).background(Panel2), contentAlignment = Alignment.Center) {
-            Text(name.take(1).uppercase(), color = Mint, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        Box(Modifier.size(50.dp).clip(CircleShape).background(Color(0xFFECE5FA)), contentAlignment = Alignment.Center) {
+            Text(name.take(1).uppercase(), color = Mint, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(13.dp))
         Column(Modifier.weight(1f)) {
-            Text(name, color = White, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Muted, fontSize = 12.sp)
+            Text(name, color = White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(3.dp))
+            Text(subtitle, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text("›", color = Mint, fontSize = 24.sp)
+        Text("›", color = Mint, fontSize = 25.sp, fontWeight = FontWeight.Light)
     }
 }
 

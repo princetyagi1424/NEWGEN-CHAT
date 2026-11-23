@@ -1,41 +1,100 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f4f7fc;
+  color-scheme: light;
+  --bg: #f5f3fb;
   --panel: #ffffff;
-  --panel-2: #edf2f9;
-  --border: #dbe4f0;
-  --text: #17233b;
-  --muted: #64748b;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --success: #16a34a;
-  --danger: #dc2626;
-  --warning: #d97706;
+  --panel-2: #f7f5fc;
+  --border: #ebe7f3;
+  --text: #201b31;
+  --muted: #89839b;
+  --accent: #7652e8;
+  --accent-hover: #6240d0;
+  --success: #16a879;
+  --danger: #dc4268;
+  --warning: #c88728;
+  --brand-violet: #7652e8;
+  --brand-pink: #e34d9a;
+  --brand-orange: #ff9b55;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
-
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; min-height: 0; margin: 0; overflow: hidden; }
-body { min-height: 100dvh; overscroll-behavior: none; }
 body {
+  min-height: 100dvh;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-@keyframes message-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+button, input, textarea { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+  outline: 3px solid rgb(118 82 232 / 30%);
+  outline-offset: 2px;
 }
-.message-enter { animation: message-in 0.18s ease-out; }
+::selection { background: rgb(118 82 232 / 18%); color: #302052; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d9d2e8; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #b9add4; }
+
+/* WhatsApp x Instagram inspired app shell */
+.newgen-app-shell {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgb(227 77 154 / 10%), transparent 34%),
+    radial-gradient(ellipse at 92% 100%, rgb(118 82 232 / 12%), transparent 38%),
+    #f6f4fa;
+}
+.newgen-app-frame {
+  border-color: rgb(230 224 241 / 90%);
+  box-shadow: 0 28px 90px rgb(47 31 83 / 12%);
+}
+.newgen-sidebar {
+  background: linear-gradient(180deg, #fff 0%, #fdfcff 100%);
+  border-color: #eeeaf5;
+}
+.newgen-brand-row { min-height: 82px; }
+.newgen-chat-panel {
+  background:
+    radial-gradient(circle at 85% 12%, rgb(227 77 154 / 5%), transparent 26%),
+    linear-gradient(145deg, #fcfbff 0%, #f8f6fc 100%);
+}
+.newgen-chat-header { border-color: #eeeaf5; }
+.newgen-tab-section button { letter-spacing: .01em; }
+.newgen-sidebar button, .newgen-chat-panel button {
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.newgen-sidebar button:active, .newgen-chat-panel button:active { transform: scale(.985); }
+.newgen-sidebar input, .newgen-chat-panel input {
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+.message-enter { animation: message-in .2s cubic-bezier(.2,.8,.2,1); }
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(9px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 @keyframes typing-dot {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  0%, 60%, 100% { opacity: .3; transform: translateY(0); }
   30% { opacity: 1; transform: translateY(-3px); }
 }
 .typing-dot { animation: typing-dot 1.2s infinite; }
-.typing-dot:nth-child(2) { animation-delay: 0.15s; }
-.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+.typing-dot:nth-child(2) { animation-delay: .15s; }
+.typing-dot:nth-child(3) { animation-delay: .3s; }
+
+@media (max-width: 767px) {
+  .newgen-app-shell { background: #fff; }
+  .newgen-app-frame { border: 0; border-radius: 0; box-shadow: none; }
+  .newgen-sidebar { border-right: 0; }
+  .newgen-brand-row { min-height: 72px; padding-top: max(1rem, env(safe-area-inset-top)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getOrCreateDeviceIdentity } from './localStore'
+import { clearLocalData, getOrCreateDeviceIdentity } from './localStore'
 
 export interface AppUser {
   id: string
@@ -33,7 +33,7 @@ async function authRequest(path: string, body: unknown) {
 
 function readSavedUser(): AppUser | null {
   try {
-    const raw = localStorage.getItem(USER_KEY)
+    const raw = sessionStorage.getItem(USER_KEY)
     return raw ? JSON.parse(raw) as AppUser : null
   } catch { return null }
 }
@@ -44,7 +44,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const configured = true
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY)
+    // Remove credentials written by earlier builds; tokens now remain tab-scoped.
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+    const token = sessionStorage.getItem(TOKEN_KEY)
     const saved = readSavedUser()
     if (!token || !saved) {
       setLoading(false)
@@ -55,11 +58,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!response.ok) throw new Error('Session expired')
         const data = await response.json()
         setUser(data.user)
-        localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+        sessionStorage.setItem(USER_KEY, JSON.stringify(data.user))
       })
       .catch(() => {
-        localStorage.removeItem(TOKEN_KEY)
-        localStorage.removeItem(USER_KEY)
+        sessionStorage.removeItem(TOKEN_KEY)
+        sessionStorage.removeItem(USER_KEY)
         setUser(null)
       })
       .finally(() => setLoading(false))
@@ -71,8 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (password.length < 10) throw new Error('Password must be at least 10 characters.')
       const data = await authRequest('/api/auth/register', { username: username.trim(), password, securityAnswer })
       const nextUser = data.user as AppUser
-      localStorage.setItem(TOKEN_KEY, data.token)
-      localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      sessionStorage.setItem(TOKEN_KEY, data.token)
+      sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
       setUser(nextUser)
       // Register this browser's device identity locally; server-side device-key
       // registration will be connected with the account security workflow.
@@ -87,8 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await authRequest('/api/auth/login', { username: username.trim(), password })
       const nextUser = data.user as AppUser
-      localStorage.setItem(TOKEN_KEY, data.token)
-      localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      sessionStorage.setItem(TOKEN_KEY, data.token)
+      sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
       setUser(nextUser)
       await getOrCreateDeviceIdentity().catch(() => null)
       return { error: null }
@@ -98,8 +101,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
+    sessionStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(USER_KEY)
+    await clearLocalData().catch(() => undefined)
     setUser(null)
   }, [])
   const refreshProfile = useCallback(async () => {}, [])
@@ -115,5 +119,5 @@ export function useAuth() {
 }
 
 export function getAuthToken() {
-  return typeof localStorage === 'undefined' ? null : localStorage.getItem(TOKEN_KEY)
+  return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(TOKEN_KEY)
 }

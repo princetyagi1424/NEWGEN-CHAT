@@ -3,27 +3,26 @@ import { exportPrivateKey, exportPublicKey, generateDeviceKeyPair, importPrivate
 
 interface NewgenDB extends DBSchema {
   device: { key: string; value: { id: string; publicKeyB64: string; privateKey: CryptoKey; deviceName: string; createdAt: string } }
-  conversationKeys: { key: string; value: { conversationId: string; keyB64: string; updatedAt: string } }
-  messageCache: { key: string; value: { id: string; conversationId: string; plaintext: string; contentType: string; createdAt: string }; indexes: { 'by-conversation': string } }
   meta: { key: string; value: { key: string; value: string } }
 }
 
 const DB_NAME = 'newgen-chat-v1'
+const DB_VERSION = 3
 let dbPromise: Promise<IDBPDatabase<NewgenDB>> | null = null
 
 function getDb() {
   if (!dbPromise) {
-    dbPromise = openDB<NewgenDB>(DB_NAME, 2, {
+    dbPromise = openDB<NewgenDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
-        // Version 1 persisted exportable private-key bytes in plaintext IndexedDB.
-        // Discard that legacy device identity instead of silently carrying it forward.
+        // Version 1 stored exportable private-key bytes. Version 2 also introduced
+        // plaintext conversation-key and decrypted-message stores. Drop all legacy
+        // secret-bearing stores during upgrade; they are intentionally not migrated.
         if (oldVersion < 2 && db.objectStoreNames.contains('device')) db.deleteObjectStore('device')
-        if (!db.objectStoreNames.contains('device')) db.createObjectStore('device')
-        if (!db.objectStoreNames.contains('conversationKeys')) db.createObjectStore('conversationKeys')
-        if (!db.objectStoreNames.contains('messageCache')) {
-          const store = db.createObjectStore('messageCache', { keyPath: 'id' })
-          store.createIndex('by-conversation', 'conversationId')
+        if (oldVersion < 3) {
+          if (db.objectStoreNames.contains('conversationKeys')) db.deleteObjectStore('conversationKeys')
+          if (db.objectStoreNames.contains('messageCache')) db.deleteObjectStore('messageCache')
         }
+        if (!db.objectStoreNames.contains('device')) db.createObjectStore('device')
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' })
       },
     })
@@ -56,32 +55,9 @@ export async function getDevicePrivateKey() {
   return existing.privateKey
 }
 
-export async function storeConversationKey(conversationId: string, keyB64: string) {
-  const db = await getDb()
-  // conversationKeys is an out-of-line-key store, so always provide its key.
-  await db.put('conversationKeys', { conversationId, keyB64, updatedAt: new Date().toISOString() }, conversationId)
-}
-
-export async function getConversationKeyB64(conversationId: string) {
-  const db = await getDb()
-  const row = await db.get('conversationKeys', conversationId)
-  return row?.keyB64 ?? null
-}
-
-export async function cacheDecryptedMessage(msg: { id: string; conversationId: string; plaintext: string; contentType: string; createdAt: string }) {
-  const db = await getDb()
-  await db.put('messageCache', msg)
-}
-
-export async function getCachedMessages(conversationId: string) {
-  const db = await getDb()
-  return db.getAllFromIndex('messageCache', 'by-conversation', conversationId)
-}
-
+/** Remove locally persisted device identity and metadata when the user signs out. */
 export async function clearLocalData() {
   const db = await getDb()
   await db.clear('device')
-  await db.clear('conversationKeys')
-  await db.clear('messageCache')
   await db.clear('meta')
 }
