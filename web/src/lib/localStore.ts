@@ -14,15 +14,18 @@ function getDb() {
   if (!dbPromise) {
     dbPromise = openDB<NewgenDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
+        // The typed DBSchema intentionally omits obsolete stores. Use the native
+        // IndexedDB type only for deleting those legacy names during migration.
+        const legacyDb = db as unknown as IDBDatabase
         // Version 1 stored exportable private-key bytes. Version 2 also introduced
         // plaintext conversation-key and decrypted-message stores. Drop all legacy
         // secret-bearing stores during upgrade; they are intentionally not migrated.
-        if (oldVersion < 2 && db.objectStoreNames.contains('device')) db.deleteObjectStore('device')
+        if (oldVersion < 2 && legacyDb.objectStoreNames.contains('device')) legacyDb.deleteObjectStore('device')
         if (oldVersion < 3) {
-          if (db.objectStoreNames.contains('conversationKeys')) db.deleteObjectStore('conversationKeys')
-          if (db.objectStoreNames.contains('messageCache')) db.deleteObjectStore('messageCache')
+          if (legacyDb.objectStoreNames.contains('conversationKeys')) legacyDb.deleteObjectStore('conversationKeys')
+          if (legacyDb.objectStoreNames.contains('messageCache')) legacyDb.deleteObjectStore('messageCache')
         }
-        if (!db.objectStoreNames.contains('device')) db.createObjectStore('device')
+        if (!legacyDb.objectStoreNames.contains('device')) db.createObjectStore('device')
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' })
       },
     })
