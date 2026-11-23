@@ -25,28 +25,28 @@ export default function ChatApp() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const activeConv = useMemo(() => conversations.find((c) => c.id === activeId) ?? null, [conversations, activeId])
 
+  const apiRequest = useCallback(async (path: string, options: RequestInit = {}) => {
+    const token = getAuthToken()
+    if (!token) throw new Error('Please sign in again')
+    const response = await fetch(path, {
+      ...options,
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
+      cache: 'no-store',
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(result.error || 'Request failed')
+    return result
+  }, [])
+
   const loadConversations = useCallback(async () => {
     if (!user) return
-    const { data: memberships } = await supabase.from('conversation_members').select('conversation_id').eq('user_id', user.id)
-    const ids = (memberships ?? []).map((m) => m.conversation_id)
-    if (!ids.length) { setConversations([]); return }
-    const { data: convs } = await supabase.from('conversations').select('*').in('id', ids).order('updated_at', { ascending: false })
-    const enriched: ConvWithMeta[] = []
-    for (const c of convs ?? []) {
-      const { data: members } = await supabase.from('conversation_members').select('user_id, role').eq('conversation_id', c.id)
-      let otherProfile: Profile | null = null
-      if (c.type === 'direct') {
-        const otherId = (members ?? []).find((m) => m.user_id !== user.id)?.user_id
-        if (otherId) {
-          const { data: p } = await supabase.from('profiles').select('*').eq('id', otherId).maybeSingle()
-          otherProfile = p as Profile | null
-        }
-      }
-      const { data: lastMsgs } = await supabase.from('messages').select('*').eq('conversation_id', c.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(1)
-      enriched.push({ ...c, members: members ?? [], otherProfile, lastMessage: lastMsgs?.[0] ?? null })
+    try {
+      const result = await apiRequest('/api/conversations')
+      setConversations(result.conversations ?? [])
+    } catch (error) {
+      console.error('Load conversations failed:', error)
     }
-    setConversations(enriched)
-  }, [user])
+  }, [user, apiRequest])
 
   useEffect(() => { loadConversations() }, [loadConversations])
 
@@ -63,36 +63,31 @@ export default function ChatApp() {
   useEffect(() => {
     if (!activeId || !user) { setMessages([]); return }
     let cancelled = false
-    async function loadAndDecrypt() {
-      const { data } = await supabase.from('messages').select('*').eq('conversation_id', activeId!).is('deleted_at', null).order('created_at', { ascending: true }).limit(200)
-      const keyB64 = await getConversationKeyB64(activeId!)
-      let key: CryptoKey | null = null
-      if (keyB64) { try { key = await importAesKey(keyB64) } catch { /* */ } }
-      const decrypted: DecryptedMessage[] = []
-      for (const m of data ?? []) {
-        if (!key) { decrypted.push({ ...m, plaintext: '[Encrypted — key not available]', decryptError: true }); continue }
-        try { decrypted.push({ ...m, plaintext: await decryptAesGcmToString(key, m.ciphertext, m.iv) }) }
-        catch { decrypted.push({ ...m, plaintext: '[Unable to decrypt]', decryptError: true }) }
+    const refreshMessages = async () => {
+      try {
+        const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
+        let keyB64 = await getConversationKeyB64(activeId)
+        if (!keyB64 && result.conversation_key) {
+          keyB64 = result.conversation_key
+          await storeConversationKey(activeId, keyB64)
+        }
+        let key: CryptoKey | null = null
+        if (keyB64) { try { key = await importAesKey(keyB64) } catch { /* invalid local key */ } }
+        const decrypted: DecryptedMessage[] = []
+        for (const m of result.messages ?? []) {
+          if (!key) { decrypted.push({ ...m, plaintext: '[Encrypted — key not available]', decryptError: true }); continue }
+          try { decrypted.push({ ...m, plaintext: await decryptAesGcmToString(key, m.ciphertext, m.iv) }) }
+          catch { decrypted.push({ ...m, plaintext: '[Unable to decrypt]', decryptError: true }) }
+        }
+        if (!cancelled) setMessages(decrypted)
+      } catch (error) {
+        if (!cancelled) console.error('Load messages failed:', error)
       }
-      if (!cancelled) setMessages(decrypted)
     }
-    loadAndDecrypt()
-    const channel = supabase.channel(`messages:${activeId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeId}` }, async (payload) => {
-        const m = payload.new as Message
-        const keyB64 = await getConversationKeyB64(activeId!)
-        let plaintext = '[Encrypted]'; let decryptError = true
-        if (keyB64) { try { const key = await importAesKey(keyB64); plaintext = await decryptAesGcmToString(key, m.ciphertext, m.iv); decryptError = false } catch { /* */ } }
-        setMessages((prev) => prev.some((x) => x.id === m.id) ? prev : [...prev, { ...m, plaintext, decryptError }])
-      })
-      .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        if (payload.user_id === user.id) return
-        setTypingUsers((prev) => prev.includes(payload.username) ? prev : [...prev, payload.username])
-        setTimeout(() => setTypingUsers((prev) => prev.filter((u) => u !== payload.username)), 2500)
-      })
-      .subscribe()
-    return () => { cancelled = true; supabase.removeChannel(channel) }
-  }, [activeId, user])
+    refreshMessages()
+    const poll = window.setInterval(refreshMessages, 2500)
+    return () => { cancelled = true; window.clearInterval(poll) }
+  }, [activeId, user, apiRequest])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typingUsers])
 
@@ -162,14 +157,17 @@ export default function ChatApp() {
     if (!user) return
     const name = window.prompt('Group name')
     if (!name?.trim()) return
-    const convKey = await generateConversationKey()
-    const keyB64 = await exportAesKey(convKey)
-    const { data: conv, error } = await supabase.from('conversations').insert({ type: 'group', name: name.trim(), created_by: user.id }).select().single()
-    if (error || !conv) return
-    await supabase.from('conversation_members').insert({ conversation_id: conv.id, user_id: user.id, role: 'owner', encrypted_conversation_key: keyB64 })
-    await storeConversationKey(conv.id, keyB64)
-    await loadConversations()
-    setActiveId(conv.id)
+    try {
+      const keyB64 = await exportAesKey(await generateConversationKey())
+      const result = await apiRequest('/api/conversations', {
+        method: 'POST', body: JSON.stringify({ name: name.trim(), conversation_key: keyB64 }),
+      })
+      await storeConversationKey(result.conversation.id, keyB64)
+      setConversations((prev) => [result.conversation, ...prev])
+      setActiveId(result.conversation.id)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not create group')
+    }
   }
 
   async function sendMessage() {
@@ -178,17 +176,30 @@ export default function ChatApp() {
     try {
       let keyB64 = await getConversationKeyB64(activeId)
       if (!keyB64) {
-        const { data: mem } = await supabase.from('conversation_members').select('encrypted_conversation_key').eq('conversation_id', activeId).eq('user_id', user.id).maybeSingle()
-        if (mem?.encrypted_conversation_key) { keyB64 = mem.encrypted_conversation_key; await storeConversationKey(activeId, keyB64) }
+        const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
+        keyB64 = result.conversation_key
+        if (keyB64) await storeConversationKey(activeId, keyB64)
       }
-      if (!keyB64) { alert('No conversation key on this device.'); return }
+      if (!keyB64) throw new Error('No conversation key is available on this device.')
       const key = await importAesKey(keyB64)
       const { ciphertext, iv } = await encryptAesGcm(key, input.trim())
-      const { error } = await supabase.from('messages').insert({ conversation_id: activeId, sender_id: user.id, ciphertext, iv, content_type: 'text' })
-      if (error) { alert(error.message); return }
-      await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', activeId)
+      await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`, {
+        method: 'POST', body: JSON.stringify({ ciphertext, iv }),
+      })
       setInput('')
-    } finally { setSending(false) }
+      const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
+      const decrypted: DecryptedMessage[] = []
+      for (const m of result.messages ?? []) {
+        try { decrypted.push({ ...m, plaintext: await decryptAesGcmToString(key, m.ciphertext, m.iv) }) }
+        catch { decrypted.push({ ...m, plaintext: '[Unable to decrypt]', decryptError: true }) }
+      }
+      setMessages(decrypted)
+      await loadConversations()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Message could not be sent')
+    } finally {
+      setSending(false)
+    }
   }
 
   const displayName = (c: ConvWithMeta) => c.type === 'group' ? (c.name || 'Group') : (c.otherProfile?.display_name || c.otherProfile?.username || 'Direct chat')
