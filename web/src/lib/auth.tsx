@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY)
     const saved = readSavedUser()
-    if (!token || !saved || !API_URL) {
+    if (!token || !saved) {
       setLoading(false)
       return
     }
