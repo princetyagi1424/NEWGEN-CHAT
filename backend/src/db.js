@@ -172,3 +172,10 @@ BEGIN
  DELETE FROM key_envelopes WHERE conversation_id=OLD.group_id;
 END;
 `);
+
+const envelopeColumns = new Set(db.pragma('table_info(key_envelopes)').map(column => column.name));
+if (!envelopeColumns.has('sender_device_id')) {
+  db.exec('ALTER TABLE key_envelopes ADD COLUMN sender_device_id TEXT REFERENCES device_keys(device_id) ON DELETE CASCADE');
+  // Legacy envelopes cannot prove which sender device created them; fail closed.
+  db.exec('DELETE FROM key_envelopes');
+}
