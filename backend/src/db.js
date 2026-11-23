@@ -157,8 +157,8 @@ CREATE TABLE IF NOT EXISTS key_envelopes (
 CREATE INDEX IF NOT EXISTS idx_key_envelopes_recipient ON key_envelopes(recipient_id, conversation_id);
 `);
 
--- Any group membership change invalidates every current group-key envelope.
--- Clients must generate a fresh group key and distribute new envelopes.
+// Any group membership change invalidates current group-key envelopes.
+// Clients must generate a fresh group key and distribute new envelopes.
 db.exec(`
 CREATE TRIGGER IF NOT EXISTS invalidate_group_envelopes_after_member_insert
 AFTER INSERT ON group_members
