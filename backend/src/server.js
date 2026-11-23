@@ -613,6 +613,7 @@ app.delete('/api/keys/devices/:deviceId', requireAuth, (req, res) => {
 app.put('/api/keys/conversations/:conversationId/envelopes', requireAuth, (req, res) => {
   const data = validate(z.object({
     recipientId: z.string().uuid(),
+    senderDeviceId: z.string().uuid(),
     recipientDeviceId: z.string().uuid(),
     ciphertext: z.string().min(24).max(8192),
     nonce: z.string().min(16).max(64),
@@ -630,17 +631,19 @@ app.put('/api/keys/conversations/:conversationId/envelopes', requireAuth, (req, 
   if (!isCanonicalBase64(data.ciphertext) || !isCanonicalBase64(data.nonce) || Buffer.from(data.nonce, 'base64').length !== 12) {
     return res.status(400).json({ error: 'Invalid encrypted key envelope' });
   }
+  const senderDevice = db.prepare('SELECT user_id FROM device_keys WHERE device_id=?').get(data.senderDeviceId);
+  if (!senderDevice || senderDevice.user_id !== req.user.id) return res.status(403).json({ error: 'Sender device key not found' });
   const device = db.prepare('SELECT user_id FROM device_keys WHERE device_id=?').get(data.recipientDeviceId);
   if (!device || device.user_id !== data.recipientId) return res.status(404).json({ error: 'Recipient device key not found' });
   const existing = db.prepare('SELECT sender_id FROM key_envelopes WHERE conversation_id=? AND recipient_device_id=?')
     .get(req.params.conversationId, data.recipientDeviceId);
   if (existing && existing.sender_id !== req.user.id) return res.status(409).json({ error: 'Only the original envelope sender can replace this envelope' });
   const now = Date.now();
-  db.prepare(`INSERT INTO key_envelopes(conversation_id,sender_id,recipient_id,recipient_device_id,ciphertext,nonce,algorithm,created_at)
-    VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(conversation_id,recipient_device_id) DO UPDATE SET
-    ciphertext=excluded.ciphertext, nonce=excluded.nonce, algorithm=excluded.algorithm, created_at=excluded.created_at
+  db.prepare(`INSERT INTO key_envelopes(conversation_id,sender_id,sender_device_id,recipient_id,recipient_device_id,ciphertext,nonce,algorithm,created_at)
+    VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(conversation_id,recipient_device_id) DO UPDATE SET
+    sender_device_id=excluded.sender_device_id, ciphertext=excluded.ciphertext, nonce=excluded.nonce, algorithm=excluded.algorithm, created_at=excluded.created_at
     WHERE key_envelopes.sender_id=excluded.sender_id`)
-    .run(req.params.conversationId, req.user.id, data.recipientId, data.recipientDeviceId, data.ciphertext, data.nonce, data.algorithm, now);
+    .run(req.params.conversationId, req.user.id, data.senderDeviceId, data.recipientId, data.recipientDeviceId, data.ciphertext, data.nonce, data.algorithm, now);
   res.status(201).json({ status: 'envelope_stored', conversationId: req.params.conversationId, recipientDeviceId: data.recipientDeviceId });
 });
 
@@ -658,7 +661,7 @@ app.get('/api/keys/conversations/:conversationId/envelopes', requireAuth, (req, 
       return res.status(403).json({ error: 'Conversation access not allowed' });
     }
   }
-  const envelopes = db.prepare(`SELECT sender_id AS senderId,recipient_id AS recipientId,recipient_device_id AS recipientDeviceId,
+  const envelopes = db.prepare(`SELECT sender_id AS senderId,sender_device_id AS senderDeviceId,recipient_id AS recipientId,recipient_device_id AS recipientDeviceId,
     ciphertext,nonce,algorithm,created_at AS createdAt FROM key_envelopes
     WHERE conversation_id=? AND recipient_id=? AND recipient_device_id=?`)
     .all(req.params.conversationId, req.user.id, deviceId);
