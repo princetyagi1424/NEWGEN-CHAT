@@ -61,7 +61,7 @@ export default async function handler(req, res) {
       if (!user.chat_unlock_pin_hash || !(await bcrypt.compare(pin, user.chat_unlock_pin_hash))) {
         return sendError(res, 401, 'Incorrect chat PIN.')
       }
-      return res.status(200).json({ status: 'verified' })
+      // Count only consecutive failed attempts: a valid PIN resets this user's\n      // rate-limit window for the current network address.\n      const { error: resetError } = await db.from('chat_pin_attempts').delete()\n        .eq('user_id', user.id).eq('ip_hash', ipHash)\n      if (resetError) throw resetError\n      return res.status(200).json({ status: 'verified' })
     }
     return sendError(res, 400, 'Unsupported action.')
   } catch (error) {
