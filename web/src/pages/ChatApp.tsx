@@ -33,7 +33,7 @@ export default function ChatApp() {
   const [passkeyError, setPasskeyError] = useState('')
   const [showPasskeyDialog, setShowPasskeyDialog] = useState(false)
   const [creatingChat, setCreatingChat] = useState(false)
-  const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'discover'>('chats')
+  const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests'>('chats')
   const bottomRef = useRef<HTMLDivElement>(null)
   const activeConv = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
   const isUnlocked = Boolean(passkey && activeId)
