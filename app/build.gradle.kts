@@ -15,7 +15,7 @@ if (file("google-services.json").exists()) {
 
 android {
     namespace = "com.newgenchat.app"
-    compileSdk = 37
+    compileSdk = 36
 
     buildFeatures {
         compose = true
@@ -25,7 +25,7 @@ android {
     defaultConfig {
         applicationId = "com.newgenchat.app"
         minSdk = 26
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
         buildConfigField("String", "API_BASE_URL", "\"$newgenApiBaseUrl\"")
