@@ -38,6 +38,7 @@ export default function ChatApp() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const activeConv = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
   const isUnlocked = Boolean(passkey && activeId)
+  const visibleConversations = conversations.filter(c => Boolean(c.lastMessage))
 
   const apiRequest = useCallback(async (path: string, options: RequestInit = {}) => {
     const token = getAuthToken()
@@ -351,13 +352,13 @@ export default function ChatApp() {
           {activeTab === 'chats' ? (
             <>
               <div className="px-5 pb-3 pt-1">
-                <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-extrabold text-slate-800">Recent conversations</h3><span className="text-[11px] font-medium text-slate-400">{conversations.length} chats</span></div>
+                <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-extrabold text-slate-800">Recent conversations</h3><span className="text-[11px] font-medium text-slate-400">{visibleConversations.length} chats</span></div>
                 <div className="flex gap-3 overflow-x-auto pb-1">
                   <div className="flex w-[62px] shrink-0 flex-col items-center gap-1.5">
                     <div className="relative grid h-[54px] w-[54px] place-items-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 p-[2px]"><div className="grid h-full w-full place-items-center rounded-full border-2 border-white bg-white text-xl font-bold text-violet-600">{(profile?.username?.[0] || 'Y').toUpperCase()}</div><span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-violet-600 text-white"><Plus className="h-3 w-3"/></span></div>
                     <span className="w-full truncate text-center text-[10px] font-semibold text-slate-500">Your story</span>
                   </div>
-                  {conversations.filter(c=>c.type==='direct' && c.otherProfile).slice(0,8).map(c => (
+                  {visibleConversations.filter(c=>c.type==='direct' && c.otherProfile).slice(0,8).map(c => (
                     <button key={c.id} type="button" onClick={() => openConversation(c.id)} className="flex w-[62px] shrink-0 flex-col items-center gap-1.5">
                       <span className="grid h-[54px] w-[54px] place-items-center rounded-full bg-gradient-to-tr from-amber-400 via-fuchsia-500 to-violet-600 p-[2px]"><span className="grid h-full w-full place-items-center rounded-full border-2 border-white bg-slate-100 text-sm font-extrabold text-slate-600">{(c.otherProfile?.username?.[0] || '?').toUpperCase()}</span></span>
                       <span className="w-full truncate text-center text-[10px] font-semibold text-slate-500">{c.otherProfile?.username}</span>
@@ -367,8 +368,8 @@ export default function ChatApp() {
               </div>
               <div className="mx-5 border-t border-slate-100"/>
               <div className="flex-1 overflow-y-auto px-2 py-2">
-                {conversations.length===0 && <div className="px-7 py-12 text-center"><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-violet-50 text-violet-500"><MessageCircle className="h-7 w-7"/></div><p className="text-sm font-bold text-slate-700">Your conversations start here</p><p className="mt-1 text-xs leading-5 text-slate-400">Search a username above to connect and start a private chat.</p></div>}
-                {conversations.map(c => {
+                {visibleConversations.length===0 && <div className="px-7 py-12 text-center"><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-violet-50 text-violet-500"><MessageCircle className="h-7 w-7"/></div><p className="text-sm font-bold text-slate-700">Your conversations start here</p><p className="mt-1 text-xs leading-5 text-slate-400">Search a username above to connect and start a private chat.</p></div>}
+                {visibleConversations.map(c => {
                   const name=displayName(c)
                   const online=c.otherProfile ? onlineIds.has(c.otherProfile.id) : false
                   return <button key={c.id} type="button" onClick={() => openConversation(c.id)} className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${activeId===c.id?'bg-violet-50':'hover:bg-slate-50'}`}>
