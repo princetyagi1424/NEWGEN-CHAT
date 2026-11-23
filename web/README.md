@@ -1,29 +1,27 @@
 # NEWGEN CHAT — Web
 
-React + TypeScript + Vite + Tailwind. Username/password authentication is handled by the NEWGEN CHAT Node.js API; Supabase Auth is not used for signup or login.
+React + TypeScript + Vite + Tailwind. The username/password account API runs as Vercel Functions in this same project; no separate backend deployment is needed for account authentication.
 
-## Run the web app
+## Vercel setup
 
-1. Deploy the `backend` service first (Node.js 20+). Set `JWT_SECRET` to a cryptographically random secret of at least 32 characters, `HOST=0.0.0.0`, and `CORS_ORIGIN` to the exact web-app origin(s).
-2. Ensure the backend uses persistent storage for `DB_PATH`; SQLite data on ephemeral hosting filesystems can be lost on restart/redeploy.
-3. Copy `.env.example` to `.env.local` and set `VITE_API_URL` to the deployed backend base URL (without a trailing slash).
-4. Run `npm install && npm run dev`.
+1. Keep the Vercel project Root Directory set to `web`.
+2. In Vercel Marketplace, create/connect a Neon PostgreSQL database to this Vercel project.
+3. In Vercel Project Settings → Environment Variables, add `JWT_SECRET` with a cryptographically random value of at least 32 characters. Neon integration supplies `DATABASE_URL`; ensure it is available to the Production deployment.
+4. Redeploy. The account table `app_users` is created automatically on first API request. Its schema is also in `database/schema.sql`.
+5. The web app calls `/api/auth/register`, `/api/auth/login`, and `/api/me` on the same domain. No `VITE_API_URL` is required.
+
+## Local development
+
+Use `npm install` then `npm run dev:vercel` (requires Vercel CLI login and local `DATABASE_URL` + `JWT_SECRET`) so the `/api` functions run alongside Vite. Plain `vite` does not execute Vercel Functions.
 
 ## Account login
 
-Users register and sign in using only a unique username and password. The backend stores usernames and bcrypt password hashes in SQLite. Passwords are never stored in frontend source files. Usernames are 3–24 letters, numbers, or underscores. Backend password policy is at least 10 characters and at most 72 UTF-8 bytes.
-
-## Deploy (Vercel)
-
-- Root Directory: `web`
-- Framework: Vite
-- Environment variable: `VITE_API_URL` for Production and Preview.
-- Deploy the Node.js API separately and configure its persistent database volume and CORS allowlist.
+Users register and sign in with only a username and password. Usernames are 3–24 lowercase letters, numbers, or underscores. Passwords must be at least 10 characters and at most 72 UTF-8 bytes. The server hashes passwords with bcrypt (12 rounds); raw passwords are never stored. Sessions are signed JWTs.
 
 ## Current migration status
 
-The login/register flow uses the custom API. Other web chat data features still contain Supabase database/realtime calls and are not yet migrated to the custom backend. Do not remove the Supabase client dependency until those remaining calls have been migrated.
+The register/login/session endpoints are Vercel serverless functions using Neon PostgreSQL. The existing chat UI still contains Supabase database and Realtime calls; friends, conversations, messages, presence, groups, and media have not yet been migrated to the Vercel API/database. Do not remove the Supabase client dependency until those chat features have been migrated.
 
 ## Security note
 
-Client-side AES-GCM + ECDH. **Not** Signal Protocol. No independent audit.
+Client-side AES-GCM + ECDH. **Not** Signal Protocol. No independent audit. Configure `JWT_SECRET` only as a server-side environment variable, never as a `VITE_` variable.
