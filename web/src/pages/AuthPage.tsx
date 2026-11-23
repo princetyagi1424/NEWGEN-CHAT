@@ -42,11 +42,6 @@ export default function AuthPage() {
             {mode === 'signin' ? 'Sign in with your username' : 'Create your NEWGEN CHAT account'}
           </p>
         </div>
-        {!configured && (
-          <div className="mb-4 p-3 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 text-sm text-[var(--warning)]">
-            Backend URL is missing. Set VITE_API_URL to your NEWGEN CHAT API address in Vercel.
-          </div>
-        )}
         <form onSubmit={onSubmit} className="space-y-4 p-6 rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
           <div>
             <label className="block text-xs text-[var(--muted)] mb-1.5">Username</label>
