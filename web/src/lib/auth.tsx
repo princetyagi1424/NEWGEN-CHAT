@@ -29,7 +29,7 @@ const AuthContext = createContext<AuthState | null>(null)
 // Supabase Auth requires an email-shaped identifier. This reserved, non-deliverable
 // address is generated internally; users never provide or need an email address.
 function usernameAuthId(username: string) {
-  return `${username.trim().toLowerCase()}@accounts.newgen-chat.invalid`
+  return `${username.trim().toLowerCase()}@accounts.newgenchat.com`
 }
 
 function normalizeUsername(username: string) {
