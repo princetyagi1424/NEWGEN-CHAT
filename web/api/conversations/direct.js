@@ -17,6 +17,11 @@ export default async function handler(req, res) {
     if ('conversation_key' in (req.body || {}) || 'passkey' in (req.body || {})) {
       return sendError(res, 400, 'Chat secrets must never be sent to the server')
     }
+    const low = token.sub < otherId ? token.sub : otherId
+    const high = token.sub < otherId ? otherId : token.sub
+    const { data: friendship, error: friendshipError } = await db.from('friendships').select('user_low').eq('user_low', low).eq('user_high', high).maybeSingle()
+    if (friendshipError) throw friendshipError
+    if (!friendship) return sendError(res, 403, 'Accept a connection request before starting a chat')
     const { data: other, error: otherError } = await db.from('app_users').select('id,username').eq('id', otherId).maybeSingle()
     if (otherError) throw otherError
     if (!other) return sendError(res, 404, 'User not found')
