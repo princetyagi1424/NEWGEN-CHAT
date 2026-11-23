@@ -19,13 +19,13 @@ export default async function handler(req, res) {
     if ((count || 0) >= 5) return sendError(res, 429, 'Too many recovery attempts. Try again in 15 minutes.')
     const { error: insertError } = await db.from('account_recovery_attempts').insert({ ip_hash: ipHash })
     if (insertError) throw insertError
-    const { data: user, error } = await db.from('app_users').select('id,security_answer_hash').eq('username', input.username).maybeSingle()
+    const { data: user, error } = await db.from('app_users').select('id,security_answer_hash,token_version').eq('username', input.username).maybeSingle()
     if (error) throw error
     if (!user?.security_answer_hash || !(await bcrypt.compare(answer, user.security_answer_hash))) {
       return sendError(res, 400, 'Invalid recovery details')
     }
     const passwordHash = await bcrypt.hash(input.password, 12)
-    const { error: updateError } = await db.from('app_users').update({ password_hash: passwordHash, token_version: 1 }).eq('id', user.id)
+    const { error: updateError } = await db.from('app_users').update({ password_hash: passwordHash, token_version: Number(user.token_version || 0) + 1 }).eq('id', user.id)
     if (updateError) throw updateError
     return res.status(200).json({ status: 'password_reset', message: 'Password reset. Sign in with your new password.' })
   } catch (error) {
