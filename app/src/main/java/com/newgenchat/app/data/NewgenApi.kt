@@ -303,6 +303,57 @@ object NewgenApi {
             request("/api/friends/requests/${encodePathSegment(requestId)}/reject", "POST", JSONObject(), accessToken)
         }
 
+    suspend fun registerDevicePublicKey(accessToken: String, deviceId: String, publicKeyB64: String) =
+        withContext(Dispatchers.IO) {
+            request(
+                "/api/keys/devices/${encodePathSegment(deviceId)}",
+                "PUT",
+                JSONObject().put("publicKey", publicKeyB64).put("algorithm", "ECDH-P256-SPKI"),
+                accessToken
+            )
+        }
+
+    suspend fun getUserDeviceKeys(accessToken: String, userId: String): List<JSONObject> =
+        withContext(Dispatchers.IO) {
+            val array = request("/api/keys/users/${encodePathSegment(userId)}/devices", "GET", null, accessToken)
+                .getJSONArray("devices")
+            (0 until array.length()).map { index -> array.getJSONObject(index) }
+        }
+
+    suspend fun storeConversationKeyEnvelope(
+        accessToken: String,
+        conversationId: String,
+        recipientId: String,
+        senderDeviceId: String,
+        recipientDeviceId: String,
+        ciphertextB64: String,
+        nonceB64: String
+    ) = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("recipientId", recipientId)
+            .put("senderDeviceId", senderDeviceId)
+            .put("recipientDeviceId", recipientDeviceId)
+            .put("ciphertext", ciphertextB64)
+            .put("nonce", nonceB64)
+            .put("algorithm", "ECDH-P256-HKDF-SHA256-AES-256-GCM")
+        request("/api/keys/conversations/${encodePathSegment(conversationId)}/envelopes", "PUT", body, accessToken)
+    }
+
+    suspend fun getConversationKeyEnvelope(
+        accessToken: String,
+        conversationId: String,
+        deviceId: String
+    ): List<JSONObject> = withContext(Dispatchers.IO) {
+        val path = "/api/keys/conversations/${encodePathSegment(conversationId)}/envelopes?deviceId=${encodePathSegment(deviceId)}"
+        val array = request(path, "GET", null, accessToken).getJSONArray("envelopes")
+        (0 until array.length()).map { index -> array.getJSONObject(index) }
+    }
+
+    suspend fun deleteDevicePublicKey(accessToken: String, deviceId: String) =
+        withContext(Dispatchers.IO) {
+            request("/api/keys/devices/${encodePathSegment(deviceId)}", "DELETE", null, accessToken)
+        }
+
     suspend fun createRecoveryCode(accessToken: String): String =
         withContext(Dispatchers.IO) {
             request("/api/account/recovery-code", "POST", JSONObject(), accessToken)
