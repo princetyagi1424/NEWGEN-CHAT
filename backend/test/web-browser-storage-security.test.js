@@ -9,7 +9,7 @@ const auth = fs.readFileSync(path.join(root, 'web/src/lib/auth.tsx'), 'utf8');
 
 test('browser database no longer persists plaintext decrypted messages or conversation keys', () => {
   assert.match(localStore, /const DB_VERSION = 3/);
-  assert.doesNotMatch(localStore, /messageCache|conversationKeys|cacheDecryptedMessage|getCachedMessages/);
+  assert.doesNotMatch(localStore, /messageCache:\s*\{|conversationKeys:\s*\{|plaintext:\s*string|keyB64:\s*string|cacheDecryptedMessage|getCachedMessages/);
   assert.match(localStore, /oldVersion < 3/);
   assert.match(localStore, /deleteObjectStore\('messageCache'\)/);
   assert.match(localStore, /deleteObjectStore\('conversationKeys'\)/);
