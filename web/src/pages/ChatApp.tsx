@@ -162,9 +162,12 @@ export default function ChatApp() {
   }, [search, user?.id])
 
   async function sendConnectionRequest(other: Profile) {
+    const chosenPasskey = window.prompt('Create a strong chat passkey (12+ characters). Remember it and share it with this person only through a separate secure channel. NEWGEN will not store or send it.')
+    if (!chosenPasskey) return
+    if (chosenPasskey.length < 12) { alert('Passkey must contain at least 12 characters.'); return }
     try {
       await apiRequest('/api/friends/requests', { method: 'POST', body: JSON.stringify({ username: other.username }) })
-      alert('Connection request sent. Chat unlock will be available after they accept.')
+      alert('Connection request sent. Keep your passkey safe and share it out-of-band. After they accept, both of you must enter the exact same passkey to read the chat.')
       setSearch('')
       setSearchResults([])
       await loadRequests()
@@ -184,9 +187,6 @@ export default function ChatApp() {
 
   async function startDirectChat(other: Profile) {
     if (!user || creatingChat) return
-    const newPasskey = window.prompt('Create a chat passkey (minimum 12 characters). Share it with the other person through a separate secure channel. It will never be sent to NEWGEN servers.')
-    if (!newPasskey) return
-    if (newPasskey.length < 12) { alert('Passkey must contain at least 12 characters.'); return }
     setCreatingChat(true)
     try {
       const result = await apiRequest('/api/conversations/direct', {
@@ -201,7 +201,8 @@ export default function ChatApp() {
       }
       setConversations(previous => [next, ...previous.filter(item => item.id !== conv.id)])
       setActiveId(conv.id)
-      setPasskey(newPasskey)
+      setPasskey(null)
+      setShowPasskeyDialog(true)
       setSearch('')
       setSearchResults([])
       setActiveTab('chats')
