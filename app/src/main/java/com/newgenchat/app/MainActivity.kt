@@ -1014,7 +1014,28 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
     }
 
     LaunchedEffect(chatKey != null, target.id) {
-        val secret = chatKey?.copyOf() ?: return@LaunchedEffect
+        val secret = chatKey?.copyOf()
+        if (secret == null) {
+            loading = true
+            try {
+                val masked = mutableListOf<RenderedMessage>()
+                if (target.isGroup) {
+                    NewgenApi.getGroupMessages(session.accessToken, target.id).forEach { item ->
+                        masked.add(RenderedMessage(item.id, item.senderId, "✦ ✦ ✦ ✦ ✦ ✦", item.createdAt,
+                            ChatCipher.EncryptedPayload(item.ciphertext, item.nonce, item.salt, item.algorithm)))
+                    }
+                } else {
+                    NewgenApi.getMessages(session.accessToken, target.id).forEach { item ->
+                        masked.add(RenderedMessage(item.id, item.senderId, "✦ ✦ ✦ ✦ ✦ ✦", item.createdAt,
+                            ChatCipher.EncryptedPayload(item.ciphertext, item.nonce, item.salt, item.algorithm)))
+                    }
+                }
+                if (chatKey == null) messages = masked
+            } catch (e: Exception) {
+                if (chatKey == null) error = e.message ?: "Could not load masked messages"
+            } finally { loading = false }
+            return@LaunchedEffect
+        }
         transientPasskeys.add(secret)
         try {
             while (true) {
@@ -1120,43 +1141,45 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
             }
         }
         if (chatKey == null) {
-            Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Icon(Icons.Default.Lock, null, tint = Mint, modifier = Modifier.size(44.dp))
-                Spacer(Modifier.height(14.dp))
-                Text("Conversation is encrypted", color = White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                Text(if (passkeyRing.isNotEmpty() && !useManualPasskey) "Enter your personal PIN to unlock with your saved device key." else "Enter your personal PIN and the shared conversation encryption passphrase.", color = Muted, fontSize = 13.sp)
-                if (passkeyRing.isNotEmpty() && !useManualPasskey) {
-                    TextButton(onClick = { useManualPasskey = true }) { Text("Use another / older passkey", color = Mint) }
-                }
-                if (pendingAttachmentUri != null) Text("A file is selected. Unlock to encrypt and send it.", color = Mint, fontSize = 12.sp)
-                Spacer(Modifier.height(18.dp))
-                OutlinedTextField(value = personalPinInput, onValueChange = { personalPinInput = it.filter(Char::isDigit).take(12) }, modifier = Modifier.fillMaxWidth(), label = { Text("Personal PIN · 4–12 digits") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-                if (passkeyRing.isEmpty() || useManualPasskey) {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = passkeyInput, onValueChange = { passkeyInput = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Conversation encryption passphrase · 12+ chars") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-                }
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = {
-                    scope.launch {
-                        try {
-                            NewgenApi.verifyChatPin(session.accessToken, personalPinInput)
-                            val key = if (passkeyRing.isNotEmpty() && !useManualPasskey) passkeyRing.first().toCharArray() else passkeyInput.toCharArray()
-                            if (key.size < 12) { error = "Enter the conversation encryption passphrase."; return@launch }
-                            passkeyInput = ""
-                            personalPinInput = ""
-                            chatKey = key
-                            val selectedUri = pendingAttachmentUri
-                            if (selectedUri != null) {
-                                val generation = unlockGeneration
-                                pendingAttachmentUri = null
-                                launchAttachmentUpload(selectedUri, key.copyOf(), generation)
+            Column(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (loading && messages.isEmpty()) item { Text("Loading masked messages…", color = Muted) }
+                    items(messages, key = { it.id }) { message ->
+                        val mine = message.senderId == session.userId
+                        Box(Modifier.fillMaxWidth(), contentAlignment = if (mine) Alignment.CenterEnd else Alignment.CenterStart) {
+                            Column(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(15.dp)).background(if (mine) Panel2 else Panel).padding(12.dp)) {
+                                Text("✦ ✦ ✦ ✦ ✦ ✦", color = Muted, fontSize = 15.sp, letterSpacing = 2.sp)
+                                Text(formatTime(message.createdAt), color = Muted, fontSize = 9.sp)
                             }
-                        } catch (e: Exception) { error = e.message ?: "PIN verification failed" }
+                        }
                     }
-                }, enabled = personalPinInput.length in 4..12 && (passkeyRing.isNotEmpty() && !useManualPasskey || passkeyInput.length >= 12), modifier = Modifier.fillMaxWidth()) { Text("Unlock chat") }
-                error?.let { Text(it, color = Danger, fontSize = 12.sp) }
+                    if (!loading && messages.isEmpty()) item { Text("No messages yet. Send the first encrypted message.", color = Muted, fontSize = 13.sp) }
+                }
+                Column(Modifier.fillMaxWidth().background(Panel).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Messages are hidden", color = White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("Enter your personal PIN here to reveal the original messages.", color = Muted, fontSize = 12.sp)
+                    OutlinedTextField(value = personalPinInput, onValueChange = { personalPinInput = it.filter(Char::isDigit).take(12) }, modifier = Modifier.fillMaxWidth(), label = { Text("Personal passkey / PIN · 4–12 digits") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    if (passkeyRing.isEmpty() || useManualPasskey) {
+                        OutlinedTextField(value = passkeyInput, onValueChange = { passkeyInput = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Master chat passkey (first setup on this device)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                    }
+                    if (passkeyRing.isNotEmpty() && !useManualPasskey) Text("Your encrypted device key is ready. Only your personal PIN is needed.", color = Mint, fontSize = 11.sp)
+                    if (passkeyRing.isNotEmpty() && !useManualPasskey) TextButton(onClick = { useManualPasskey = true }) { Text("Use another / older master passkey", color = Mint) }
+                    Button(onClick = {
+                        scope.launch {
+                            try {
+                                NewgenApi.verifyChatPin(session.accessToken, personalPinInput)
+                                val key = if (passkeyRing.isNotEmpty() && !useManualPasskey) passkeyRing.first().toCharArray() else passkeyInput.toCharArray()
+                                if (key.size < 12) { error = "Set your master chat passkey in Settings first."; return@launch }
+                                passkeyInput = ""
+                                personalPinInput = ""
+                                chatKey = key
+                            } catch (e: Exception) { error = e.message ?: "PIN verification failed" }
+                        }
+                    }, enabled = personalPinInput.length in 4..12 && (passkeyRing.isNotEmpty() && !useManualPasskey || passkeyInput.length >= 12), modifier = Modifier.fillMaxWidth()) { Text("Unlock messages") }
+                    error?.let { Text(it, color = Danger, fontSize = 12.sp) }
+                }
             }
-        } else {
+else {
             LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (loading && messages.isEmpty()) item { Text("Loading encrypted messages…", color = Muted) }
                 if (!loading && messages.isEmpty()) item { Text("No messages yet. Send the first encrypted message.", color = Muted, fontSize = 13.sp) }
