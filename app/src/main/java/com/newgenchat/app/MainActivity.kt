@@ -427,18 +427,20 @@ private fun ChatsPane(
 @Composable
 private fun ChatListRow(name: String, subtitle: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(Panel).clickable(onClick = onClick).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(19.dp)).background(Panel)
+            .clickable(onClick = onClick).padding(horizontal = 13.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(42.dp).clip(CircleShape).background(Panel2), contentAlignment = Alignment.Center) {
-            Text(name.take(1).uppercase(), color = Mint, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        Box(Modifier.size(50.dp).clip(CircleShape).background(Color(0xFFECE5FA)), contentAlignment = Alignment.Center) {
+            Text(name.take(1).uppercase(), color = Mint, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(13.dp))
         Column(Modifier.weight(1f)) {
-            Text(name, color = White, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Muted, fontSize = 12.sp)
+            Text(name, color = White, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(3.dp))
+            Text(subtitle, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text("›", color = Mint, fontSize = 24.sp)
+        Text("›", color = Mint, fontSize = 25.sp, fontWeight = FontWeight.Light)
     }
 }
 
