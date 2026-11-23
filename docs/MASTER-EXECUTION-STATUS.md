@@ -1,6 +1,6 @@
 # NEWGEN CHAT — Master Execution Status
 
-Last updated: 2026-11-23 (UTC)
+Last updated: 2026-11-23 (UTC; CI checkpoint at 13:56)
 Working branch: `feature/passkey-privacy-social-ui`
 Pull request: https://github.com/princetyagi1424/NEWGEN-CHAT/pull/2
 
@@ -43,11 +43,15 @@ Workflow run: https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/451858
 
 ## Fixes applied
 
+- [x] Restored the complete web ChatApp component render tree after the first attempted boundary edit was shown by CI to have selected an effect cleanup return rather than the component render. The corrected render was verified by a successful Vite production build.
+- [x] Updated the Android plugin contract test to assert the newly required Kotlin Android plugin alias. A follow-up run confirms all 54 backend tests pass.
+
 - [x] Removed the duplicated, incomplete JSX section from `web/src/pages/ChatApp.tsx`, retaining the newer complete UI render.
 - [x] Added the Kotlin Android Gradle plugin alias, pinned to the existing Kotlin version.
 - [x] Applied the Kotlin Android plugin in the app module.
-- [ ] Re-run and verify web production build on GitHub Actions.
-- [ ] Re-run and verify Android debug build on GitHub Actions.
+- [x] Web production build passed on GitHub Actions run for commit `150415a5f1314ab60280e9e707b661b223d05b8e` (Vite production build completed successfully).
+- [x] Backend Node test suite passed on GitHub Actions run for commit `150415a5f1314ab60280e9e707b661b223d05b8e` (54 tests, 54 passed, 0 failed).
+- [ ] Android debug build is still running on GitHub Actions for commit `150415a5f1314ab60280e9e707b661b223d05b8e`; do not mark passed until the assemble step completes.
 
 ## Feature acceptance checklist
 
