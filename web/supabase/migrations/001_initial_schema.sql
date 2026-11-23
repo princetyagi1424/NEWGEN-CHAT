@@ -94,13 +94,10 @@ create policy "conv_select" on public.conversations for select to authenticated 
 );
 create policy "conv_insert" on public.conversations for insert to authenticated with check (auth.uid() = created_by);
 
+-- The browser may read only its own membership row. Authorized server APIs
+-- return group member lists using the server-only service role.
 create policy "members_select" on public.conversation_members for select to authenticated using (
-  conversation_members.user_id = auth.uid()
-  or exists (
-    select 1 from public.conversation_members m2
-    where m2.conversation_id = conversation_members.conversation_id
-      and m2.user_id = auth.uid()
-  )
+  user_id = auth.uid()
 );
 -- Membership writes are intentionally server-only. The API authenticates the caller
 -- and checks friendship/group-role rules before changing membership. A client must

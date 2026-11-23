@@ -41,7 +41,11 @@ test('group ownership transfer is restricted to owner and preserves an admin', (
   assert.match(server, /target\.role==='admin' && group\.owner_id!==req\.user\.id && req\.params\.userId!==req\.user\.id/);
 });
 
-test('membership visibility policy correlates the member row to the outer conversation', () => {
-  assert.match(schema, /m2\.conversation_id = conversation_members\.conversation_id/);
-  assert.match(migration, /m2\.conversation_id = conversation_members\.conversation_id/);
+test('browser membership reads are self-only and avoid recursive RLS subqueries', () => {
+  const policy = schema.match(/create policy "members_select"[\s\S]*?\);/i)?.[0] || '';
+  const migratedPolicy = migration.match(/CREATE POLICY "members_select"[\s\S]*?\);/i)?.[0] || '';
+  assert.match(policy, /user_id = auth\.uid\(\)/);
+  assert.match(migratedPolicy, /user_id = auth\.uid\(\)/);
+  assert.doesNotMatch(policy, /FROM public\.conversation_members/i);
+  assert.doesNotMatch(migratedPolicy, /FROM public\.conversation_members/i);
 });
