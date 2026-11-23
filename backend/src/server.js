@@ -29,7 +29,9 @@ const usernameSchema = z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/);
 const passwordSchema = z.string().min(10).refine(value => Buffer.byteLength(value, 'utf8') <= 72, {
   message: 'Password must be at most 72 UTF-8 bytes (bcrypt limit)'
 });
+const SECURITY_QUESTION = 'What was the name of your first school?';
 const authSchema = z.object({ username: usernameSchema, password: passwordSchema });
+const registerSchema = authSchema.extend({ securityQuestion: z.literal(SECURITY_QUESTION), securityAnswer: z.string().trim().min(2).max(100) });
 const encryptedSchema = z.object({ ciphertext: z.string().min(1).max(100000), nonce: z.string().min(8).max(128), salt: z.string().min(8).max(128), algorithm: z.literal('AES-256-GCM-PBKDF2-SHA256').optional(), expiresInSeconds: z.number().int().min(10).max(30*24*60*60).optional() });
 
 function issueToken(user) {
@@ -59,13 +61,14 @@ function friendshipBetween(a, b) {
 
 app.get('/api/health', (_req,res) => res.json({ status:'ok', service:'newgen-chat-api', timestamp:Date.now() }));
 app.post('/api/auth/register', authLimiter, async (req,res) => {
-  const data = validate(authSchema, req,res); if (!data) return;
+  const data = validate(registerSchema, req,res); if (!data) return;
   const username = data.username.toLowerCase();
   if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) return res.status(409).json({ error:'Username is already taken' });
   const id = randomUUID();
   const passwordHash = await bcrypt.hash(data.password, 12);
+  const securityAnswerHash = await bcrypt.hash(data.securityAnswer.normalize('NFKC').trim().toLowerCase(), 12);
   try {
-    db.prepare('INSERT INTO users(id,username,password_hash,created_at) VALUES(?,?,?,?)').run(id,username,passwordHash,Date.now());
+    db.prepare('INSERT INTO users(id,username,password_hash,created_at,security_question,security_answer_hash) VALUES(?,?,?,?,?,?)').run(id,username,passwordHash,Date.now(),data.securityQuestion,securityAnswerHash);
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') return res.status(409).json({ error:'Username is already taken' });
     throw error;
@@ -394,20 +397,25 @@ app.post('/api/account/recovery-code', requireAuth, (req,res) => {
     .run(req.user.id,hash,Date.now());
   res.json({recoveryCode, warning:'Save this code offline. It is shown only once and cannot recover encrypted chat keys.'});
 });
-app.post('/api/account/recover-password', authLimiter, (req,res) => {
+app.post('/api/account/recover-password', authLimiter, async (req,res) => {
   const data=validate(z.object({
     username:usernameSchema,
-    recoveryCode:z.string().min(20).max(100),
+    recoveryCode:z.string().min(20).max(100).optional(),
+    securityAnswer:z.string().trim().min(2).max(100).optional(),
     newPassword:passwordSchema
-  }),req,res); if(!data)return;
-  const user=db.prepare('SELECT id FROM users WHERE username=?').get(data.username.toLowerCase());
+  }).refine(value => Boolean(value.recoveryCode) !== Boolean(value.securityAnswer), { message:'Provide exactly one recovery method' }),req,res); if(!data)return;
+  const user=db.prepare('SELECT id,security_answer_hash FROM users WHERE username=?').get(data.username.toLowerCase());
   if(!user)return res.status(400).json({error:'Invalid recovery details'});
-  const hash=require('node:crypto').createHash('sha256').update(data.recoveryCode).digest('hex');
-  const saved=db.prepare('SELECT code_hash FROM account_recovery WHERE user_id=?').get(user.id);
-  if(!saved || !require('node:crypto').timingSafeEqual(Buffer.from(saved.code_hash),Buffer.from(hash))) {
-    return res.status(400).json({error:'Invalid recovery details'});
+  let verified = false;
+  if (data.recoveryCode) {
+    const hash=require('node:crypto').createHash('sha256').update(data.recoveryCode).digest('hex');
+    const saved=db.prepare('SELECT code_hash FROM account_recovery WHERE user_id=?').get(user.id);
+    verified = Boolean(saved && require('node:crypto').timingSafeEqual(Buffer.from(saved.code_hash),Buffer.from(hash)));
+  } else if (data.securityAnswer && user.security_answer_hash) {
+    verified = await bcrypt.compare(data.securityAnswer.normalize('NFKC').trim().toLowerCase(), user.security_answer_hash);
   }
-  const passwordHash = bcrypt.hashSync(data.newPassword,12);
+  if (!verified) return res.status(400).json({error:'Invalid recovery details'});
+  const passwordHash = await bcrypt.hash(data.newPassword,12);
   // Revoke every existing access token when account credentials are recovered.
   db.prepare('UPDATE users SET password_hash=?, token_version=token_version+1 WHERE id=?').run(passwordHash,user.id);
   db.prepare('DELETE FROM account_recovery WHERE user_id=?').run(user.id);
