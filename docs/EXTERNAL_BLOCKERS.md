@@ -5,7 +5,8 @@ Source baseline: `cf19c0cb72391bab82dbe9c8bfdab8ad40238ab4`
 
 | Area | Status | Required next action |
 |---|---|---|
-| Supabase membership RLS hardening | Implemented in source; hosted DB not verified | Apply `web/database/migrations/004_membership_rls_hardening.sql` in Supabase SQL Editor and test anon/authenticated/service_role behavior |
+| Supabase membership RLS hardening | Implemented in source; hosted DB not verified | Apply `web/database/migrations/004_membership_rls_hardening.sql` and `005_atomic_chat_pin_rate_limit.sql` in Supabase SQL Editor and test anon/authenticated/service_role behavior |
+| PIN response + atomic throttling | Code fix and atomic RPC migration | Apply `005_atomic_chat_pin_rate_limit.sql` and verify concurrent 8-attempt throttling on hosted Supabase |
 | Browser device-key creation | Code fix + source regression test | Run in real supported browsers; verify IndexedDB CryptoKey persistence and reload |
 | Group ownership transfer | Backend endpoint + static contract test | Add Android/Web admin UI and run live authorization tests |
 | Matrix/Olm/Megolm E2EE | Not implemented | Provision stable HTTPS homeserver + PostgreSQL; integrate pinned SDK on Android/Web; migrate identity/messages safely |

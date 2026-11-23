@@ -9,6 +9,8 @@ Audit branch: `fix/web-device-key-persistence`
 - **Web device identity could fail during first creation.** The ECDH pair was generated non-extractable, then the client attempted to export its private key. WebCrypto rejects that operation. The key is now exported only in memory and immediately re-imported as non-extractable; the temporary byte buffer is wiped before IndexedDB persistence.
 - **Web private-key import was extractable.** The PKCS#8 import helper now requests a non-extractable key and wipes its decoded input bytes.
 - **Supabase membership self-join / self-promotion.** The prior RLS policies allowed an authenticated client to insert itself into a known conversation and update its own membership row, including its role. The bootstrap schema now grants authenticated clients read-only access to membership rows. Migration `004_membership_rls_hardening.sql` applies the same restriction to existing projects. Membership writes must go through the authenticated server API.
+- **PIN success response was accidentally inside a comment.** Literal escaped-newline text had commented out the success response and reset. The handler now returns a real JSON response after a successful reset.
+- **PIN throttling was vulnerable to concurrent requests.** The previous count-then-insert pattern was not atomic. A transaction-scoped PostgreSQL advisory lock serializes attempts per account/network pair, and PIN-change security-answer checks share the same limit.
 - **Group owner could be removed by another admin.** Ownership is now checked against `groups_chat.owner_id`; an owner-only transfer endpoint was added, and removal of the current owner or another admin by a non-owner is rejected.
 
 ## Existing security controls observed
