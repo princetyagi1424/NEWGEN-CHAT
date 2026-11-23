@@ -860,6 +860,10 @@ private fun SettingsPane(
                     confirmLogoutAll = false
                     busy = true
                     scope.launch {
+                        // Remove this device's push token and presence before the
+                        // server revokes the account token version.
+                        runCatching { NewgenApi.unregisterCurrentPushToken(session.accessToken) }
+                        runCatching { NewgenApi.setOffline(session.accessToken) }
                         runCatching { NewgenApi.logoutAllSessions(session.accessToken) }
                             .onSuccess { onLogout() }
                             .onFailure { notice = it.message ?: "Could not revoke all sessions" }

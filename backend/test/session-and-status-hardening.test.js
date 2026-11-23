@@ -44,6 +44,8 @@ test('JWT sessions support individual logout and account-wide logout-all revocat
   assert.match(server, /INSERT OR IGNORE INTO revoked_tokens\(jti,user_id,expires_at,revoked_at\)/);
   assert.match(server, /app\.post\('\/api\/auth\/logout-all'/);
   assert.match(server, /UPDATE users SET token_version=token_version\+1 WHERE id=\?/);
+  assert.match(server, /DELETE FROM push_devices WHERE user_id=\?/);
+  assert.match(server, /UPDATE user_presence SET last_seen_at=\?,is_online=0 WHERE user_id=\?/);
 });
 
 test('Android and Web sign-out call the server-side session revocation endpoint', () => {
@@ -54,6 +56,8 @@ test('Android and Web sign-out call the server-side session revocation endpoint'
   assert.match(androidApi, /request\("\/api\/auth\/logout", "POST"/);
   assert.match(androidApi, /request\("\/api\/auth\/logout-all", "POST"/);
   assert.match(androidUi, /NewgenApi\.logout\(session\.accessToken\)/);
+  assert.match(androidUi, /NewgenApi\.unregisterCurrentPushToken\(session\.accessToken\)/);
+  assert.match(androidUi, /NewgenApi\.setOffline\(session\.accessToken\)/);
   assert.match(androidUi, /NewgenApi\.logoutAllSessions\(session\.accessToken\)/);
   assert.match(webAuth, /\/api\/auth\/logout/);
 });

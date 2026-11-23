@@ -109,6 +109,10 @@ app.post('/api/auth/logout', requireAuth, (req,res) => {
 app.post('/api/auth/logout-all', requireAuth, (req,res) => {
   const now = Date.now();
   db.prepare('UPDATE users SET token_version=token_version+1 WHERE id=?').run(req.user.id);
+  // Revoke every registered push route as well: devices must sign in again
+  // before they can receive notifications for this account.
+  db.prepare('DELETE FROM push_devices WHERE user_id=?').run(req.user.id);
+  db.prepare('UPDATE user_presence SET last_seen_at=?,is_online=0 WHERE user_id=?').run(now, req.user.id);
   db.prepare('DELETE FROM revoked_tokens WHERE user_id=? OR expires_at<=?').run(req.user.id, now);
   res.status(204).end();
 });
