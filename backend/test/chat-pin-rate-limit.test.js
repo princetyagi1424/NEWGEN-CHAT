@@ -11,7 +11,7 @@ const migration = fs.readFileSync(path.join(repo, 'web/database/migrations/005_a
 test('PIN verification returns a real success response after clearing attempts', () => {
   const lines = handler.split(/\r?\n/);
   const successLine = lines.findIndex(line => /^\s*return res\.status\(200\)\.json\(\{ status: 'verified' \}\)/.test(line));
-  const resetLine = lines.findIndex(line => /await resetAttempts\(db, user\.id, ipHash\)/.test(line));
+  const resetLine = lines.findIndex(line => /await resetAttempts\(db, user\.id\)/.test(line));
   assert.ok(resetLine >= 0, 'successful verification must clear its attempt window');
   assert.ok(successLine > resetLine, 'the success response must execute after resetting attempts');
 });
@@ -30,7 +30,7 @@ test('PIN and security-answer attempts use an atomic account-wide database rate 
   assert.match(migration, /GRANT EXECUTE ON FUNCTION[\s\S]*TO service_role/);
 });
 
-test('a correct PIN resets the current user and network attempt window', () => {
+test('a correct PIN resets the account-wide attempt window', () => {
   const resetBlock = handler.slice(handler.indexOf('async function resetAttempts'), handler.indexOf('export default'));
   assert.match(resetBlock, /\.eq\('user_id', userId\)/);
   assert.doesNotMatch(resetBlock, /ip_hash/);
