@@ -10,5 +10,5 @@ test('successful chat PIN verification clears failed attempts for that user and 
   const reset = verifyBranch.lastIndexOf(".eq('user_id', user.id).eq('ip_hash', ipHash)", success);
   assert.ok(reset >= 0, 'successful PIN must reset the matching attempt counter');
   assert.ok(reset < success, 'attempt reset must complete before reporting verification success');
-  assert.match(verifyBranch, /if \(count >= 8\) return sendError\(res, 429/);
+  assert.match(verifyBranch, /if \(\(count \|\| 0\) >= 8\) return sendError\(res, 429/);
 });
