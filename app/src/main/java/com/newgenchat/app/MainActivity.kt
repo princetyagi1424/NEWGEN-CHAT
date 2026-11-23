@@ -11,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -381,7 +382,7 @@ private fun ChatsPane(
         OutlinedTextField(
             value = search, onValueChange = { search = it },
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            placeholder = { Text("Search users or conversations…") },
+            placeholder = { Text("Search chats…") },
             leadingIcon = { Text("⌕", color = Muted, fontSize = 24.sp) },
             singleLine = true, shape = RoundedCornerShape(18.dp),
             colors = OutlinedTextFieldDefaults.colors(
