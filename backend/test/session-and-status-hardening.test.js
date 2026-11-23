@@ -34,3 +34,26 @@ test('status detail route exposes encrypted replies only to owner or accepted fr
 test('group membership cannot remove the final admin', () => {
   assert.match(server, /A group must retain at least one admin/);
 });
+
+test('JWT sessions support individual logout and account-wide logout-all revocation', () => {
+  assert.match(server, /jti: randomUUID\(\)/);
+  assert.match(db, /CREATE TABLE IF NOT EXISTS revoked_tokens/);
+  assert.match(db, /idx_revoked_tokens_expires/);
+  assert.match(server, /payload\.jti && db\.prepare\('SELECT 1 FROM revoked_tokens WHERE jti=\? AND expires_at>\?'\)/);
+  assert.match(server, /app\.post\('\/api\/auth\/logout'/);
+  assert.match(server, /INSERT OR IGNORE INTO revoked_tokens\(jti,user_id,expires_at,revoked_at\)/);
+  assert.match(server, /app\.post\('\/api\/auth\/logout-all'/);
+  assert.match(server, /UPDATE users SET token_version=token_version\+1 WHERE id=\?/);
+});
+
+test('Android and Web sign-out call the server-side session revocation endpoint', () => {
+  const repo = path.resolve(root, '..');
+  const androidApi = fs.readFileSync(path.join(repo, 'app/src/main/java/com/newgenchat/app/data/NewgenApi.kt'), 'utf8');
+  const androidUi = fs.readFileSync(path.join(repo, 'app/src/main/java/com/newgenchat/app/MainActivity.kt'), 'utf8');
+  const webAuth = fs.readFileSync(path.join(repo, 'web/src/lib/auth.tsx'), 'utf8');
+  assert.match(androidApi, /request\("\/api\/auth\/logout", "POST"/);
+  assert.match(androidApi, /request\("\/api\/auth\/logout-all", "POST"/);
+  assert.match(androidUi, /NewgenApi\.logout\(session\.accessToken\)/);
+  assert.match(androidUi, /NewgenApi\.logoutAllSessions\(session\.accessToken\)/);
+  assert.match(webAuth, /\/api\/auth\/logout/);
+});

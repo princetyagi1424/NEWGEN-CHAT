@@ -101,6 +101,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    const token = sessionStorage.getItem(TOKEN_KEY)
+    if (token) {
+      // Best-effort server revocation; local sign-out must still complete offline.
+      void fetch(`${API_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+      }).catch(() => undefined)
+    }
     sessionStorage.removeItem(TOKEN_KEY)
     sessionStorage.removeItem(USER_KEY)
     await clearLocalData().catch(() => undefined)

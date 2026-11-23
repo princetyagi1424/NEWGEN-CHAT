@@ -35,7 +35,7 @@ const registerSchema = authSchema.extend({ securityQuestion: z.literal(SECURITY_
 const encryptedSchema = z.object({ ciphertext: z.string().min(1).max(100000), nonce: z.string().min(8).max(128), salt: z.string().min(8).max(128), algorithm: z.literal('AES-256-GCM-PBKDF2-SHA256').optional(), expiresInSeconds: z.number().int().min(10).max(30*24*60*60).optional() });
 
 function issueToken(user) {
-  return jwt.sign({ sub: user.id, username: user.username, ver: Number(user.token_version || 0) }, process.env.JWT_SECRET, { expiresIn: process.env.TOKEN_TTL || '7d', issuer: 'newgen-chat' });
+  return jwt.sign({ sub: user.id, username: user.username, ver: Number(user.token_version || 0), jti: randomUUID() }, process.env.JWT_SECRET, { expiresIn: process.env.TOKEN_TTL || '7d', issuer: 'newgen-chat' });
 }
 function requireAuth(req, res, next) {
   const header = req.get('authorization') || '';
@@ -46,7 +46,13 @@ function requireAuth(req, res, next) {
     if (!current || Number(payload.ver || 0) !== Number(current.token_version || 0)) {
       return res.status(401).json({ error: 'Session expired; please log in again' });
     }
+    if (payload.jti && db.prepare('SELECT 1 FROM revoked_tokens WHERE jti=? AND expires_at>?').get(payload.jti, Date.now())) {
+      return res.status(401).json({ error: 'Session revoked; please log in again' });
+    }
     req.user = { id: current.id, username: current.username };
+    // A legacy token without jti is still accepted until expiry. Logging out with
+    // such a token falls back to token_version revocation for all devices.
+    req.authSession = { jti: typeof payload.jti === 'string' ? payload.jti : null, expiresAt: Number(payload.exp || 0) * 1000 };
     next();
   } catch { res.status(401).json({ error: 'Authentication required' }); }
 }
@@ -83,6 +89,29 @@ app.post('/api/auth/login', authLimiter, async (req,res) => {
   res.json({ user:{ id:user.id, username:user.username }, token:issueToken(user) });
 });
 app.get('/api/me', requireAuth, (req,res) => res.json({ user:req.user }));
+
+// Revoke only the current JWT on normal logout. Legacy pre-jti tokens cannot be
+// revoked individually, so their logout safely falls back to revoking all sessions.
+app.post('/api/auth/logout', requireAuth, (req,res) => {
+  const now = Date.now();
+  const session = req.authSession;
+  if (session?.jti && session.expiresAt > now) {
+    db.prepare('INSERT OR IGNORE INTO revoked_tokens(jti,user_id,expires_at,revoked_at) VALUES(?,?,?,?)')
+      .run(session.jti, req.user.id, session.expiresAt, now);
+  } else {
+    db.prepare('UPDATE users SET token_version=token_version+1 WHERE id=?').run(req.user.id);
+  }
+  db.prepare('DELETE FROM revoked_tokens WHERE expires_at<=?').run(now);
+  res.status(204).end();
+});
+
+// Revoke every active token for the account, including tokens on other devices.
+app.post('/api/auth/logout-all', requireAuth, (req,res) => {
+  const now = Date.now();
+  db.prepare('UPDATE users SET token_version=token_version+1 WHERE id=?').run(req.user.id);
+  db.prepare('DELETE FROM revoked_tokens WHERE user_id=? OR expires_at<=?').run(req.user.id, now);
+  res.status(204).end();
+});
 
 // Device push registration. FCM tokens are sensitive routing identifiers and are
 // never returned to clients or included in logs. Payloads intentionally contain no

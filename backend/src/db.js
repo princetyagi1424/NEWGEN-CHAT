@@ -68,6 +68,18 @@ CREATE TABLE IF NOT EXISTS status_replies (
  ciphertext TEXT NOT NULL, nonce TEXT NOT NULL, salt TEXT NOT NULL, created_at INTEGER NOT NULL
 );
 `);
+
+// Revoked JWT IDs allow one-device logout without invalidating every other session.
+// Expired entries are pruned on logout; password reset/logout-all still use token_version.
+db.exec(`CREATE TABLE IF NOT EXISTS revoked_tokens (
+ jti TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ expires_at INTEGER NOT NULL,
+ revoked_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_revoked_tokens_user ON revoked_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expires ON revoked_tokens(expires_at);
+`);
 module.exports = db;
 
 
