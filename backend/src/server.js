@@ -292,12 +292,36 @@ app.post('/api/groups/:groupId/members', requireAuth, (req,res) => {
   catch{return res.status(409).json({error:'User is already a member or group does not exist'});}
   res.status(201).json({status:'added'});
 });
+// Ownership is authoritative in groups_chat.owner_id; the admin role alone
+// must never allow an admin to remove or impersonate the owner.
+app.post('/api/groups/:groupId/transfer-ownership', requireAuth, (req,res) => {
+  const data=validate(z.object({userId:z.string().uuid()}),req,res);if(!data)return;
+  const group=db.prepare('SELECT owner_id FROM groups_chat WHERE id=?').get(req.params.groupId);
+  if(!group)return res.status(404).json({error:'Group not found'});
+  if(group.owner_id!==req.user.id)return res.status(403).json({error:'Only the group owner can transfer ownership'});
+  if(data.userId===req.user.id)return res.status(400).json({error:'The current owner already owns this group'});
+  const target=db.prepare('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?').get(req.params.groupId,data.userId);
+  if(!target)return res.status(404).json({error:'New owner must already be a group member'});
+  const transfer=db.transaction(()=>{
+    db.prepare('UPDATE groups_chat SET owner_id=? WHERE id=? AND owner_id=?').run(data.userId,req.params.groupId,req.user.id);
+    // The prior owner becomes a regular member. The new owner is promoted to admin;
+    // any other existing admins retain their role.
+    db.prepare("UPDATE group_members SET role='member' WHERE group_id=? AND user_id=?").run(req.params.groupId,req.user.id);
+    db.prepare("UPDATE group_members SET role='admin' WHERE group_id=? AND user_id=?").run(req.params.groupId,data.userId);
+  });
+  transfer();
+  res.json({status:'ownership_transferred',ownerId:data.userId});
+});
 app.delete('/api/groups/:groupId/members/:userId', requireAuth, (req,res) => {
   const actor=db.prepare('SELECT role FROM group_members WHERE group_id=? AND user_id=?').get(req.params.groupId,req.user.id);
   if(!actor)return res.status(403).json({error:'Not a group member'});
-  if(req.params.userId!==req.user.id && actor.role!=='admin')return res.status(403).json({error:'Group admin permission required'});
+  const group=db.prepare('SELECT owner_id FROM groups_chat WHERE id=?').get(req.params.groupId);
+  if(!group)return res.status(404).json({error:'Group not found'});
+  if(req.params.userId===group.owner_id)return res.status(409).json({error:'Transfer group ownership before removing the owner'});
+  if(req.params.userId!==req.user.id && group.owner_id!==req.user.id && actor.role!=='admin')return res.status(403).json({error:'Group admin permission required'});
   const target=db.prepare('SELECT role FROM group_members WHERE group_id=? AND user_id=?').get(req.params.groupId,req.params.userId);
   if(!target)return res.status(404).json({error:'Member not found'});
+  if(target.role==='admin' && group.owner_id!==req.user.id)return res.status(403).json({error:'Only the group owner can remove another admin'});
   if(target.role==='admin'){
     const other=db.prepare("SELECT user_id FROM group_members WHERE group_id=? AND role='admin' AND user_id<>? LIMIT 1").get(req.params.groupId,req.params.userId);
     if(!other)return res.status(409).json({error:'A group must retain at least one admin'});

@@ -97,10 +97,11 @@ create policy "conv_insert" on public.conversations for insert to authenticated 
 create policy "members_select" on public.conversation_members for select to authenticated using (
   user_id = auth.uid() or exists (select 1 from public.conversation_members m2 where m2.conversation_id = conversation_id and m2.user_id = auth.uid())
 );
-create policy "members_insert" on public.conversation_members for insert to authenticated with check (
-  auth.uid() = user_id or exists (select 1 from public.conversation_members m where m.conversation_id = conversation_id and m.user_id = auth.uid() and m.role in ('owner','admin'))
-);
-create policy "members_update" on public.conversation_members for update to authenticated using (user_id = auth.uid());
+-- Membership writes are intentionally server-only. The API authenticates the caller
+-- and checks friendship/group-role rules before changing membership. A client must
+-- not be able to self-join a known conversation or promote its own role.
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.conversation_members FROM anon, authenticated;
+GRANT SELECT ON TABLE public.conversation_members TO authenticated;
 
 create policy "messages_select" on public.messages for select to authenticated using (
   exists (select 1 from public.conversation_members m where m.conversation_id = messages.conversation_id and m.user_id = auth.uid())

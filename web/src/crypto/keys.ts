@@ -16,7 +16,10 @@ function base64ToBuf(b64: string): Uint8Array {
 }
 
 export async function generateDeviceKeyPair(): Promise<CryptoKeyPair> {
-  return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits'])
+  // WebCrypto's extractability flag applies to both halves of the pair. Generate
+  // an exportable pair only long enough to re-import the private key as
+  // non-extractable before it is persisted in IndexedDB.
+  return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits'])
 }
 export async function exportPublicKey(key: CryptoKey): Promise<string> {
   return bufToBase64(await crypto.subtle.exportKey('spki', key))
@@ -28,7 +31,12 @@ export async function exportPrivateKey(key: CryptoKey): Promise<string> {
   return bufToBase64(await crypto.subtle.exportKey('pkcs8', key))
 }
 export async function importPrivateKey(b64: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey('pkcs8', base64ToBuf(b64), { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits'])
+  const encoded = base64ToBuf(b64)
+  try {
+    return await crypto.subtle.importKey('pkcs8', encoded, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits'])
+  } finally {
+    encoded.fill(0)
+  }
 }
 export async function generateConversationKey(): Promise<CryptoKey> {
   return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])
