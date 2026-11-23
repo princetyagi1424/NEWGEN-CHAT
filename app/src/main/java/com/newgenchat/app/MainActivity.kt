@@ -120,6 +120,12 @@ private data class RenderedMessage(
     val attachment: AttachmentMeta? = null
 )
 
+private fun clearLocalAccountState(context: android.content.Context) {
+    SessionStore.clear(context)
+    runCatching { ChatPasskeyStore.clear(context) }
+    runCatching { PrivateMediaStore(context).clearAll() }
+}
+
 @Composable
 private fun NewgenApp() {
     val context = LocalContext.current
@@ -145,7 +151,7 @@ private fun NewgenApp() {
         val token = withContext(Dispatchers.IO) { SessionStore.load(context) }
         if (!token.isNullOrBlank()) {
             session = runCatching { NewgenApi.restoreSession(token) }.getOrNull()
-            if (session == null) withContext(Dispatchers.IO) { SessionStore.clear(context) }
+            if (session == null) withContext(Dispatchers.IO) { clearLocalAccountState(context) }
         }
         bootstrapping = false
     }
@@ -170,12 +176,12 @@ private fun NewgenApp() {
                 onRefresh = { refreshKey++ },
                 onOpenChat = { activeChat = it },
                 onLogout = {
-                    SessionStore.clear(context)
+                    clearLocalAccountState(context)
                     activeChat = null
                     session = null
                 },
                 onAccountDeleted = {
-                    SessionStore.clear(context)
+                    clearLocalAccountState(context)
                     activeChat = null
                     session = null
                 }
