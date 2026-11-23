@@ -44,7 +44,7 @@ Workflow run: https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/451858
 
 ## Fixes applied
 
-- [x] Web auth access token and user cache moved from persistent `localStorage` to tab-scoped `sessionStorage`; legacy persistent token/user entries are removed on app initialization.
+- [x] Web auth access token and user cache moved from persistent `localStorage` to tab-scoped `sessionStorage`; legacy persistent token/user entries are removed on app initialization. This reduces long-lived at-rest exposure but is not an XSS boundary: active same-origin script can still read session storage. A production HttpOnly-cookie/BFF design remains a separate hardening item.
 - [x] Sign-out clears tab-scoped auth state and locally persisted device/meta data.
 - [x] IndexedDB schema advanced to version 3; legacy plaintext decrypted-message cache and plaintext conversation-key stores are deleted during upgrade and are no longer declared or written.
 - [x] Added `backend/test/web-browser-storage-security.test.js` to enforce no plaintext message/key persistence and tab-scoped token handling.
@@ -130,6 +130,7 @@ Legend: [x] existing implementation evidence found; [ ] incomplete, unverified, 
 
 ### Phase 11 — Performance/accessibility/security
 - [ ] Performance profiling and accessibility audit.
+- [ ] Replace tab-scoped JS-readable bearer tokens with a production-appropriate HttpOnly session/BFF design if deployment architecture permits; sessionStorage is not XSS-resistant.
 - [ ] XSS/CSRF/IDOR/media ACL/token leakage/rate-limit penetration tests.
 - [ ] Independent cryptographic/security review.
 
