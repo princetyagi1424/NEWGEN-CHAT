@@ -58,7 +58,8 @@ export async function getDevicePrivateKey() {
 
 export async function storeConversationKey(conversationId: string, keyB64: string) {
   const db = await getDb()
-  await db.put('conversationKeys', { conversationId, keyB64, updatedAt: new Date().toISOString() })
+  // conversationKeys is an out-of-line-key store, so always provide its key.
+  await db.put('conversationKeys', { conversationId, keyB64, updatedAt: new Date().toISOString() }, conversationId)
 }
 
 export async function getConversationKeyB64(conversationId: string) {
