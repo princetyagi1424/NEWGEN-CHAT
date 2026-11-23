@@ -1,0 +1,14 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      DB_PATH: /app/data/newgen-chat.sqlite
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - newgen_data:/app/data
+volumes:
+  newgen_data:

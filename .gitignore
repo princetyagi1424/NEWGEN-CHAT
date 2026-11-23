@@ -1,0 +1,37 @@
+.gradle/
+.idea/
+local.properties
+/build/
+**/build/
+*.iml
+.DS_Store
+server/.env
+server/data/
+server/postgres-data/
+backend/.env
+backend/data/
+backend/node_modules/
+*.jks
+*.keystore
+# Firebase project configuration and server credentials
+app/google-services.json
+**/service-account*.json
+firebase-service-account*.json
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+secrets/
+service-account*.json
+google-services.json
+
+# Build outputs
+.gradle/
+**/build/
+**/.idea/
+local.properties
+node_modules/
+.DS_Store
