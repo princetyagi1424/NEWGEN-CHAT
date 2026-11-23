@@ -57,3 +57,12 @@ test('conversation and message writes cannot bypass the authenticated server API
   assert.match(schema, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.messages FROM anon, authenticated/i);
   assert.match(schema, /messages_select[\s\S]*?messages\.conversation_id/);
 });
+
+test('unimplemented web chat actions are visibly disabled rather than dead clickable buttons', () => {
+  const chat = fs.readFileSync(path.join(repo, 'web/src/pages/ChatApp.tsx'), 'utf8');
+  assert.match(chat, /Audio calls are not available yet[^>]*aria-disabled="true" disabled/);
+  assert.match(chat, /More options are not available yet[^>]*aria-disabled="true" disabled/);
+  assert.match(chat, /Attachments are not enabled on web yet/);
+  const attachmentButton = chat.match(/<button[^>]*Attachments are not enabled on web yet[^>]*>/)?.[0] || '';
+  assert.match(attachmentButton, /aria-disabled="true" disabled/);
+});
