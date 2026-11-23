@@ -16,12 +16,11 @@ interface AuthState {
   refreshProfile: () => Promise<void>
 }
 const AuthContext = createContext<AuthState | null>(null)
-const API_URL = ((import.meta as any).env?.VITE_API_URL as string | undefined)?.replace(/\/$/, '')
+const API_URL = (((import.meta as any).env?.VITE_API_URL as string | undefined) || '').replace(/\/$/, '')
 const TOKEN_KEY = 'newgen_access_token'
 const USER_KEY = 'newgen_user'
 
 async function authRequest(path: string, body: unknown) {
-  if (!API_URL) throw new Error('Backend URL is not configured. Set VITE_API_URL in Vercel.')
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -42,7 +41,7 @@ function readSavedUser(): AppUser | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const configured = Boolean(API_URL)
+  const configured = true
 
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY)
