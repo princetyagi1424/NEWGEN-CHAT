@@ -90,8 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await authRequest('/api/auth/login', { username: username.trim(), password })
       const nextUser = data.user as AppUser
-      localStorage.setItem(TOKEN_KEY, data.token)
-      localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      sessionStorage.setItem(TOKEN_KEY, data.token)
+      sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
       setUser(nextUser)
       await getOrCreateDeviceIdentity().catch(() => null)
       return { error: null }
@@ -101,8 +101,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
+    sessionStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(USER_KEY)
+    await clearLocalData().catch(() => undefined)
     setUser(null)
   }, [])
   const refreshProfile = useCallback(async () => {}, [])
