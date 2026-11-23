@@ -1,21 +1,13 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
-import type { Session, User } from '@supabase/supabase-js'
-import { supabase, isSupabaseConfigured } from './supabase'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getOrCreateDeviceIdentity } from './localStore'
-import type { Profile } from '../types/database'
 
+export interface AppUser {
+  id: string
+  username: string
+}
 interface AuthState {
-  session: Session | null
-  user: User | null
-  profile: Profile | null
+  user: AppUser | null
+  profile: { id: string; username: string; display_name: string | null } | null
   loading: boolean
   configured: boolean
   signUp: (username: string, password: string) => Promise<{ error: string | null }>
@@ -23,140 +15,97 @@ interface AuthState {
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
-
 const AuthContext = createContext<AuthState | null>(null)
+const API_URL = ((import.meta as any).env?.VITE_API_URL as string | undefined)?.replace(/\/$/, '')
+const TOKEN_KEY = 'newgen_access_token'
+const USER_KEY = 'newgen_user'
 
-// Supabase Auth requires an email-shaped identifier. This reserved, non-deliverable
-// address is generated internally; users never provide or need an email address.
-function usernameAuthId(username: string) {
-  return `${username.trim().toLowerCase()}@accounts.newgenchat.com`
+async function authRequest(path: string, body: unknown) {
+  if (!API_URL) throw new Error('Backend URL is not configured. Set VITE_API_URL in Vercel.')
+  const response = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.error || 'Authentication failed. Please try again.')
+  return data
 }
 
-function normalizeUsername(username: string) {
-  return username.trim().toLowerCase()
-}
-
-function validUsername(username: string) {
-  return /^[a-z0-9_]{3,24}$/.test(username)
+function readSavedUser(): AppUser | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    return raw ? JSON.parse(raw) as AppUser : null
+  } catch { return null }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
-  const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [user, setUser] = useState<AppUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const configured = isSupabaseConfigured()
-
-  const loadProfile = useCallback(async (uid: string) => {
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle()
-    if (!error && data) setProfile(data as Profile)
-    else setProfile(null)
-  }, [])
+  const configured = Boolean(API_URL)
 
   useEffect(() => {
-    if (!configured) { setLoading(false); return }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
-      if (data.session?.user) {
-        loadProfile(data.session.user.id).finally(() => setLoading(false))
-        getOrCreateDeviceIdentity().then(async (device) => {
-          await supabase.from('devices').upsert({
-            id: device.id,
-            user_id: data.session!.user.id,
-            device_name: device.deviceName,
-            public_key: device.publicKeyB64,
-            last_seen_at: new Date().toISOString(),
-          }, { onConflict: 'id' })
-        }).catch(console.error)
-      } else setLoading(false)
-    })
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s)
-      setUser(s?.user ?? null)
-      if (s?.user) loadProfile(s.user.id)
-      else setProfile(null)
-    })
-    return () => sub.subscription.unsubscribe()
-  }, [configured, loadProfile])
+    const token = localStorage.getItem(TOKEN_KEY)
+    const saved = readSavedUser()
+    if (!token || !saved || !API_URL) {
+      setLoading(false)
+      return
+    }
+    fetch(`${API_URL}/api/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(async response => {
+        if (!response.ok) throw new Error('Session expired')
+        const data = await response.json()
+        setUser(data.user)
+        localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+      })
+      .catch(() => {
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(USER_KEY)
+        setUser(null)
+      })
+      .finally(() => setLoading(false))
+  }, [])
 
   const signUp = useCallback(async (username: string, password: string) => {
-    if (!configured) return { error: 'Supabase is not configured.' }
-    const cleanUser = normalizeUsername(username)
-    if (!validUsername(cleanUser)) return { error: 'Username must be 3–24 characters and contain only letters, numbers, or underscores.' }
-    if (password.length < 8) return { error: 'Password must be at least 8 characters.' }
-
-    const { data, error } = await supabase.auth.signUp({
-      email: usernameAuthId(cleanUser),
-      password,
-      options: { data: { username: cleanUser } },
-    })
-    if (error) {
-      if (/already registered|already been registered|user already/i.test(error.message)) {
-        return { error: 'This username is already taken. Please choose another one.' }
-      }
-      return { error: error.message }
-    }
-    if (!data.user) return { error: 'Account creation failed. Please try again.' }
-    if (!data.session) {
-      return { error: 'Instant signup is not enabled yet. Disable email confirmation in Supabase Authentication settings, then try again.' }
-    }
-
-    const { error: profileError } = await supabase.from('profiles').insert({
-      id: data.user.id,
-      username: cleanUser,
-      display_name: username.trim(),
-    })
-    if (profileError) {
-      await supabase.auth.signOut()
-      return { error: profileError.code === '23505' ? 'This username is already taken.' : 'Could not create your profile. Please try again.' }
-    }
-
-    await loadProfile(data.user.id)
-
     try {
-      const device = await getOrCreateDeviceIdentity()
-      await supabase.from('devices').upsert({
-        id: device.id,
-        user_id: data.user.id,
-        device_name: device.deviceName,
-        public_key: device.publicKeyB64,
-        last_seen_at: new Date().toISOString(),
-      })
-    } catch (e) { console.error(e) }
-    return { error: null }
-  }, [configured, loadProfile])
+      if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) throw new Error('Username must be 3–24 letters, numbers, or underscores.')
+      if (password.length < 10) throw new Error('Password must be at least 10 characters.')
+      const data = await authRequest('/api/auth/register', { username: username.trim(), password })
+      const nextUser = data.user as AppUser
+      localStorage.setItem(TOKEN_KEY, data.token)
+      localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      setUser(nextUser)
+      // Register this browser's device identity locally; server-side device-key
+      // registration will be connected with the account security workflow.
+      await getOrCreateDeviceIdentity().catch(() => null)
+      return { error: null }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Could not create account.' }
+    }
+  }, [])
 
   const signIn = useCallback(async (username: string, password: string) => {
-    if (!configured) return { error: 'Supabase is not configured.' }
-    const cleanUser = normalizeUsername(username)
-    if (!validUsername(cleanUser)) return { error: 'Enter a valid username.' }
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: usernameAuthId(cleanUser),
-      password,
-    })
-    if (error) {
-      return { error: 'Incorrect username or password.' }
-    }
     try {
-      const device = await getOrCreateDeviceIdentity()
-      const { data: { user: currentUser } } = await supabase.auth.getUser()
-      if (currentUser) await supabase.from('devices').upsert({
-        id: device.id,
-        user_id: currentUser.id,
-        device_name: device.deviceName,
-        public_key: device.publicKeyB64,
-        last_seen_at: new Date().toISOString(),
-      }, { onConflict: 'id' })
-    } catch (e) { console.error(e) }
-    return { error: null }
-  }, [configured])
+      const data = await authRequest('/api/auth/login', { username: username.trim(), password })
+      const nextUser = data.user as AppUser
+      localStorage.setItem(TOKEN_KEY, data.token)
+      localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      setUser(nextUser)
+      await getOrCreateDeviceIdentity().catch(() => null)
+      return { error: null }
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : 'Could not sign in.' }
+    }
+  }, [])
 
-  const signOut = useCallback(async () => { await supabase.auth.signOut(); setProfile(null) }, [])
-  const refreshProfile = useCallback(async () => { if (user) await loadProfile(user.id) }, [user, loadProfile])
-
-  const value = useMemo(() => ({ session, user, profile, loading, configured, signUp, signIn, signOut, refreshProfile }), [session, user, profile, loading, configured, signUp, signIn, signOut, refreshProfile])
+  const signOut = useCallback(async () => {
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(USER_KEY)
+    setUser(null)
+  }, [])
+  const refreshProfile = useCallback(async () => {}, [])
+  const profile = user ? { id: user.id, username: user.username, display_name: user.username } : null
+  const value = useMemo(() => ({ user, profile, loading, configured, signUp, signIn, signOut, refreshProfile }), [user, profile, loading, configured, signUp, signIn, signOut, refreshProfile])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
@@ -164,4 +113,8 @@ export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
+}
+
+export function getAuthToken() {
+  return typeof localStorage === 'undefined' ? null : localStorage.getItem(TOKEN_KEY)
 }
