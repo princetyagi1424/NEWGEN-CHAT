@@ -44,7 +44,7 @@ export default function AuthPage() {
         </div>
         {!configured && (
           <div className="mb-4 p-3 rounded-lg border border-[var(--warning)]/40 bg-[var(--warning)]/10 text-sm text-[var(--warning)]">
-            Supabase credentials are missing. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.
+            Backend URL is missing. Set VITE_API_URL to your NEWGEN CHAT API address in Vercel.
           </div>
         )}
         <form onSubmit={onSubmit} className="space-y-4 p-6 rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
@@ -75,7 +75,7 @@ export default function AuthPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={10}
             />
           </div>
           {error && <div role="alert" className="text-sm text-[var(--danger)]">{error}</div>}
