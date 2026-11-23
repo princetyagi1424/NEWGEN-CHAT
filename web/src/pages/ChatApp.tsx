@@ -167,8 +167,8 @@ export default function ChatApp() {
   const displayName = (c: ConvWithMeta) => c.type === 'group' ? (c.name || 'Group') : (c.otherProfile?.display_name || c.otherProfile?.username || 'Direct chat')
 
   return (
-    <div className="h-full flex bg-[var(--bg)]">
-      <aside className="w-full max-w-xs border-r border-[var(--border)] flex flex-col bg-[var(--panel)]">
+    <div className="h-[100dvh] w-full flex overflow-hidden bg-[var(--bg)]">
+      <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-80 md:max-w-xs shrink-0 border-r border-[var(--border)] flex-col bg-[var(--panel)] min-h-0`}>
         <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
           <div className="flex items-center gap-2 font-semibold"><MessageCircle className="w-5 h-5 text-[var(--accent)]" /> NEWGEN</div>
           <div className="flex gap-1">
@@ -203,17 +203,21 @@ export default function ChatApp() {
         </div>
         <div className="p-3 border-t border-[var(--border)] text-xs text-[var(--muted)] truncate">@{profile?.username ?? '…'}</div>
       </aside>
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className={`${activeId ? 'flex' : 'hidden md:flex'} flex-1 flex-col min-w-0 min-h-0 overflow-hidden`}>
         {!activeConv ? (
           <div className="flex-1 flex items-center justify-center text-[var(--muted)]">
             <div className="text-center"><MessageCircle className="w-12 h-12 mx-auto mb-4 opacity-40" /><p>Select or start a conversation</p><Link to="/" className="text-sm text-[var(--accent)] mt-2 inline-block">Home</Link></div>
           </div>
         ) : (
           <>
-            <header className="h-14 border-b border-[var(--border)] px-4 flex items-center gap-3 bg-[var(--panel)]">
-              <div className="font-medium">{displayName(activeConv)}</div>
+            <header className="h-14 shrink-0 border-b border-[var(--border)] px-3 md:px-4 flex items-center gap-3 bg-[var(--panel)]">
+              <button type="button" onClick={() => setActiveId(null)} className="md:hidden p-2 -ml-1 rounded-lg hover:bg-[var(--panel-2)]" aria-label="Back to chats">
+                <span className="text-xl leading-none">‹</span>
+              </button>
+              <div className="min-w-0 flex-1 font-medium truncate">{displayName(activeConv)}</div>
+              <span className="text-xs text-[var(--muted)]">NEWGEN CHAT</span>
             </header>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 md:p-4 space-y-3">
               {messages.map((m) => {
                 const mine = m.sender_id === user?.id
                 return (
@@ -228,7 +232,7 @@ export default function ChatApp() {
               {typingUsers.length > 0 && <div className="text-xs text-[var(--muted)]">{typingUsers.join(', ')} typing…</div>}
               <div ref={bottomRef} />
             </div>
-            <div className="p-3 border-t border-[var(--border)] bg-[var(--panel)]">
+            <div className="shrink-0 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[var(--border)] bg-[var(--panel)]">
               <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); sendMessage() }}>
                 <input className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)] text-sm" placeholder="Encrypted message…" value={input} onChange={(e) => setInput(e.target.value)} disabled={sending} />
                 <button type="submit" disabled={sending || !input.trim()} className="px-4 py-2.5 rounded-xl bg-[var(--accent)] disabled:opacity-50 text-white"><Send className="w-4 h-4" /></button>
