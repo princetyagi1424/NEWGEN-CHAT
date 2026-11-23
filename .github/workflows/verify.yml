@@ -55,7 +55,7 @@ jobs:
           node-version: 22
       - name: Install web dependencies
         working-directory: web
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: TypeScript validation
         working-directory: web
         run: npm run typecheck
