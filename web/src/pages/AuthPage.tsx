@@ -18,7 +18,7 @@ export default function AuthPage() {
   if (user) navigate('/app', { replace: true })
 
   async function recoverAccount(username: string, answer: string, nextPassword: string) {
-    const response = await fetch(`${((import.meta as any).env?.VITE_API_URL as string | undefined || '').replace(/\\/$/, '')}/api/auth/recover`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.trim(), securityAnswer: answer, newPassword: nextPassword }) })
+    const response = await fetch('/api/auth/recover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.trim(), securityAnswer: answer, newPassword: nextPassword }) })
     const data = await response.json().catch(() => ({}))
     return { error: response.ok ? null : (data.error || 'Account recovery failed') }
   }
