@@ -65,6 +65,7 @@ import org.json.JSONObject
 import java.io.File
 import com.newgenchat.app.data.*
 import com.newgenchat.app.security.ChatCipher
+import com.newgenchat.app.security.ChatPasskeyStore
 import com.newgenchat.app.security.SessionStore
 import java.text.DateFormat
 import java.util.Date
@@ -702,20 +703,71 @@ private fun SettingsPane(
     onLogout: () -> Unit,
     onAccountDeleted: () -> Unit
 ) {
+    val context = LocalContext.current
     var recovery by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var blockedUsers by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
+    var passkey by remember { mutableStateOf("") }
+    var confirmPasskey by remember { mutableStateOf("") }
+    var passkeyCount by remember { mutableIntStateOf(0) }
+    var showPasskey by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(session.accessToken) {
-        runCatching { NewgenApi.getBlockedUsers(session.accessToken) }
-            .onSuccess { blockedUsers = it }
+        runCatching { NewgenApi.getBlockedUsers(session.accessToken) }.onSuccess { blockedUsers = it }
+        passkeyCount = ChatPasskeyStore.loadAll(context).size
     }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(22.dp)) {
         Text("Account & privacy", color = White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text("Signed in as @${session.username}", color = Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(20.dp))
+        Text("Master chat passkey", color = White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (passkeyCount > 0) "One passkey is used by default for all your chats. ${passkeyCount - 1} previous key(s) are kept encrypted on this device for old messages."
+            else "Create one strong passkey for all your chats. Share the same passkey with your contacts through a separate secure channel.",
+            color = Muted, fontSize = 12.sp
+        )
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = passkey, onValueChange = { passkey = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(if (passkeyCount == 0) "New master passkey" else "New passkey") },
+            visualTransformation = if (showPasskey) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = confirmPasskey, onValueChange = { confirmPasskey = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Confirm passkey") },
+            visualTransformation = if (showPasskey) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+            singleLine = true
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = showPasskey, onCheckedChange = { showPasskey = it })
+            Text("Show passkey", color = Muted, fontSize = 12.sp)
+        }
+        Button(
+            onClick = {
+                if (passkey.length < 12 || passkey.length > 256) {
+                    notice = "Passkey must be 12–256 characters."
+                } else if (passkey != confirmPasskey) {
+                    notice = "Passkeys do not match."
+                } else {
+                    ChatPasskeyStore.setCurrent(context, passkey.toCharArray())
+                    passkey = ""; confirmPasskey = ""; passkeyCount = ChatPasskeyStore.loadAll(context).size
+                    notice = "Master passkey updated. New messages will use it; previous keys remain available for old messages on this device. Share the new passkey securely with your contacts."
+                }
+            },
+            enabled = passkey.isNotEmpty() && confirmPasskey.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text(if (passkeyCount == 0) "Set master passkey" else "Change master passkey") }
+        Text("Passkeys are encrypted with Android Keystore and are never uploaded. Changing the passkey does not rewrite old messages; previous keys are retained locally so old history remains readable on this device.", color = Muted, fontSize = 11.sp)
+        notice?.let { Text(it, color = Mint, fontSize = 12.sp) }
+
+        Spacer(Modifier.height(22.dp))
+        HorizontalDivider(color = Panel2)
+        Spacer(Modifier.height(14.dp))
         Text("Account recovery", color = White, fontWeight = FontWeight.Bold)
         Text("Generate a one-time code and store it offline. It restores account login only; it cannot restore chat passkeys.", color = Muted, fontSize = 12.sp)
         Button(onClick = {
@@ -731,7 +783,6 @@ private fun SettingsPane(
             Text("Save this code now. It is shown only once:", color = Mint, fontSize = 12.sp)
             Text(it, color = White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
-        notice?.let { Text(it, color = Danger, fontSize = 12.sp) }
         Spacer(Modifier.height(20.dp))
         HorizontalDivider(color = Panel2)
         Spacer(Modifier.height(14.dp))
@@ -753,7 +804,7 @@ private fun SettingsPane(
         }
         Spacer(Modifier.height(20.dp))
         Text("Security notes", color = White, fontWeight = FontWeight.Bold)
-        Text("• Screen capture is restricted with Android FLAG_SECURE.\n• The server receives encrypted message payloads, not chat passkeys.\n• This build uses a custom shared-passphrase AES-GCM prototype, not a reviewed Signal/Matrix protocol.", color = Muted, fontSize = 12.sp)
+        Text("• Screen capture is restricted with Android FLAG_SECURE.\n• The server receives encrypted message payloads, not chat passkeys.\n• This is a custom shared-passphrase AES-GCM prototype, not a reviewed Signal/Matrix protocol.", color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(20.dp))
         OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Log out") }
         Spacer(Modifier.height(8.dp))
@@ -785,6 +836,7 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
     val context = LocalContext.current
     val mediaStore = remember(context) { PrivateMediaStore(context) }
     var passkeyInput by remember { mutableStateOf("") }
+    var passkeyRing by remember { mutableStateOf<List<String>>(emptyList()) }
     var chatKey by remember { mutableStateOf<CharArray?>(null) }
     var draft by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf<List<RenderedMessage>>(emptyList()) }
@@ -812,6 +864,11 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
     var pendingAttachmentUri by remember { mutableStateOf<Uri?>(null) }
     val transientPasskeys = remember { mutableSetOf<CharArray>() }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(context) { passkeyRing = withContext(Dispatchers.IO) { ChatPasskeyStore.loadAll(context) } }
+    LaunchedEffect(target.id, passkeyRing) {
+        if (chatKey == null && passkeyRing.isNotEmpty()) chatKey = passkeyRing.first().toCharArray()
+    }
 
     fun lockConversation() {
         unlockGeneration++
@@ -870,25 +927,47 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
                 val history = NewgenApi.getGroupMessages(session.accessToken, target.id)
                 for (message in history) {
                     val envelope = ChatCipher.EncryptedPayload(message.ciphertext, message.nonce, message.salt, message.algorithm)
-                    val messageKey = secret.copyOf()
-                    transientPasskeys.add(messageKey)
-                    val text = try { withContext(Dispatchers.Default) { decryptPayload(envelope, messageKey) } }
-                    catch (_: Exception) { "Unable to decrypt. Check this conversation's passkey." }
-                    finally { transientPasskeys.remove(messageKey); messageKey.fill('\u0000') }
-                    val decoded = decodeMessageContent(text)
+                    val candidates = (listOf(String(secret)) + passkeyRing).distinct()
+                    var text: String? = null
+                    for (candidate in candidates) {
+                        val messageKey = candidate.toCharArray()
+                        transientPasskeys.add(messageKey)
+                        try {
+                            text = withContext(Dispatchers.Default) { decryptPayload(envelope, messageKey) }
+                            break
+                        } catch (_: Exception) {
+                            // Try the next locally retained passkey for messages sent before rotation.
+                        } finally {
+                            transientPasskeys.remove(messageKey)
+                            messageKey.fill('\u0000')
+                        }
+                    }
+                    val decodedText = text ?: "Unable to decrypt. Check your saved master/previous passkeys."
+                    val decoded = decodeMessageContent(decodedText)
                     rendered.add(RenderedMessage(message.id, message.senderId, decoded.first, message.createdAt, envelope, decoded.second))
                 }
             } else {
                 val history = NewgenApi.getMessages(session.accessToken, target.id)
                 for (message in history) {
                     val envelope = ChatCipher.EncryptedPayload(message.ciphertext, message.nonce, message.salt, message.algorithm)
-                    val messageKey = secret.copyOf()
-                    transientPasskeys.add(messageKey)
-                    val text = try { withContext(Dispatchers.Default) { decryptPayload(envelope, messageKey) } }
-                    catch (_: Exception) { "Unable to decrypt. Check this conversation's passkey." }
-                    finally { transientPasskeys.remove(messageKey); messageKey.fill('\u0000') }
+                    val candidates = (listOf(String(secret)) + passkeyRing).distinct()
+                    var text: String? = null
+                    for (candidate in candidates) {
+                        val messageKey = candidate.toCharArray()
+                        transientPasskeys.add(messageKey)
+                        try {
+                            text = withContext(Dispatchers.Default) { decryptPayload(envelope, messageKey) }
+                            break
+                        } catch (_: Exception) {
+                            // Try the next locally retained passkey for messages sent before rotation.
+                        } finally {
+                            transientPasskeys.remove(messageKey)
+                            messageKey.fill('\u0000')
+                        }
+                    }
+                    val decodedText = text ?: "Unable to decrypt. Check your saved master/previous passkeys."
                     if (message.senderId != session.userId) runCatching { NewgenApi.markMessageRead(session.accessToken, message.id) }
-                    val decoded = decodeMessageContent(text)
+                    val decoded = decodeMessageContent(decodedText)
                     rendered.add(RenderedMessage(message.id, message.senderId, decoded.first, message.createdAt, envelope, decoded.second))
                 }
             }
@@ -1009,7 +1088,7 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
                 Icon(Icons.Default.Lock, null, tint = Mint, modifier = Modifier.size(44.dp))
                 Spacer(Modifier.height(14.dp))
                 Text("Conversation is encrypted", color = White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                Text("Enter this chat's unique passkey. It is used locally and is never sent to the server.", color = Muted, fontSize = 13.sp)
+                Text(if (passkeyRing.isNotEmpty()) "Your saved master passkey is being used across chats." else "Enter a passkey, then save it in Settings as your master passkey for all chats.", color = Muted, fontSize = 13.sp)
                 if (pendingAttachmentUri != null) Text("A file is selected. Unlock to encrypt and send it.", color = Mint, fontSize = 12.sp)
                 Spacer(Modifier.height(18.dp))
                 OutlinedTextField(value = passkeyInput, onValueChange = { passkeyInput = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Chat passkey · 12+ characters") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
