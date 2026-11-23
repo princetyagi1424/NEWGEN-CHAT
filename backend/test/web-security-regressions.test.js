@@ -9,6 +9,7 @@ const keys = fs.readFileSync(path.join(repo, 'web/src/crypto/keys.ts'), 'utf8');
 const localStore = fs.readFileSync(path.join(repo, 'web/src/lib/localStore.ts'), 'utf8');
 const schema = fs.readFileSync(path.join(repo, 'web/supabase/migrations/001_initial_schema.sql'), 'utf8');
 const migration = fs.readFileSync(path.join(repo, 'web/database/migrations/004_membership_rls_hardening.sql'), 'utf8');
+const writeMigration = fs.readFileSync(path.join(repo, 'web/database/migrations/006_server_only_conversation_writes.sql'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'src/server.js'), 'utf8');
 
 test('browser device identity reimports the private key as non-extractable and wipes temporary bytes', () => {
@@ -65,4 +66,13 @@ test('unimplemented web chat actions are visibly disabled rather than dead click
   assert.match(chat, /Attachments are not enabled on web yet/);
   const attachmentButton = chat.match(/<button[^>]*Attachments are not enabled on web yet[^>]*>/)?.[0] || '';
   assert.match(attachmentButton, /aria-disabled="true" disabled/);
+});
+
+test('existing Supabase projects receive server-only conversation and message write permissions', () => {
+  assert.match(writeMigration, /DROP POLICY IF EXISTS "conv_insert"/i);
+  assert.match(writeMigration, /DROP POLICY IF EXISTS "messages_insert"/i);
+  assert.match(writeMigration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.conversations FROM anon, authenticated/i);
+  assert.match(writeMigration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.messages FROM anon, authenticated/i);
+  assert.match(writeMigration, /ALTER TABLE public\.conversations ENABLE ROW LEVEL SECURITY/i);
+  assert.match(writeMigration, /ALTER TABLE public\.messages ENABLE ROW LEVEL SECURITY/i);
 });
