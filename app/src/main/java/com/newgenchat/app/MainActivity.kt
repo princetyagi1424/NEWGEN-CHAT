@@ -378,7 +378,7 @@ private fun ChatsPane(
     var showCreateGroup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val filteredFriends = friends.filter { it.username.contains(search.trim(), ignoreCase = true) }
-    Column(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 18.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
         OutlinedTextField(
             value = search, onValueChange = { search = it },
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
