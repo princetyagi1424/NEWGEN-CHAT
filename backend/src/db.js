@@ -146,6 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_device_keys_user ON device_keys(user_id);
 CREATE TABLE IF NOT EXISTS key_envelopes (
  conversation_id TEXT NOT NULL,
  sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ sender_device_id TEXT NOT NULL REFERENCES device_keys(device_id) ON DELETE CASCADE,
  recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  recipient_device_id TEXT NOT NULL REFERENCES device_keys(device_id) ON DELETE CASCADE,
  ciphertext TEXT NOT NULL,
