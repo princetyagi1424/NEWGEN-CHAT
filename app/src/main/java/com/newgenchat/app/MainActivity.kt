@@ -378,7 +378,16 @@ private fun ChatsPane(
     var search by remember { mutableStateOf("") }
     var showCreateGroup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val filteredFriends = friends.filter { it.username.contains(search.trim(), ignoreCase = true) }
+    var friendsWithMessages by remember { mutableStateOf<Set<String>>(emptySet()) }
+    LaunchedEffect(session.accessToken, friends) {
+        val active = mutableSetOf<String>()
+        friends.forEach { friend ->
+            runCatching { NewgenApi.getMessages(session.accessToken, friend.id) }
+                .onSuccess { history -> if (history.isNotEmpty()) active.add(friend.id) }
+        }
+        friendsWithMessages = active
+    }
+    val filteredFriends = friends.filter { it.id in friendsWithMessages && it.username.contains(search.trim(), ignoreCase = true) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
         OutlinedTextField(
             value = search, onValueChange = { search = it },
@@ -396,7 +405,7 @@ private fun ChatsPane(
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Your circle", color = White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Text("${friends.size} friends", color = Muted, fontSize = 11.sp)
+            Text("${friendsWithMessages.size} chats", color = Muted, fontSize = 11.sp)
         }
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
