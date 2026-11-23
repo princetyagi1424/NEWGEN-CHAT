@@ -30,6 +30,7 @@ export default function ChatApp() {
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
   const [passkey, setPasskey] = useState<string | null>(null)
   const [passkeyEntry, setPasskeyEntry] = useState('')
+  const [personalPinEntry, setPersonalPinEntry] = useState('')
   const [passkeyError, setPasskeyError] = useState('')
   const [showPasskeyDialog, setShowPasskeyDialog] = useState(false)
   const [creatingChat, setCreatingChat] = useState(false)
@@ -54,6 +55,7 @@ export default function ChatApp() {
   const lockChat = useCallback(() => {
     setPasskey(null)
     setPasskeyEntry('')
+    setPersonalPinEntry('')
     setPasskeyError('')
     setMessages(previous => previous.map(m => ({ ...m, plaintext: undefined, locked: true })))
   }, [])
@@ -162,16 +164,27 @@ export default function ChatApp() {
   }, [search, user?.id])
 
   async function sendConnectionRequest(other: Profile) {
-    const chosenPasskey = window.prompt('Create a strong chat passkey (12+ characters). Remember it and share it with this person only through a separate secure channel. NEWGEN will not store or send it.')
-    if (!chosenPasskey) return
-    if (chosenPasskey.length < 12) { alert('Passkey must contain at least 12 characters.'); return }
     try {
       await apiRequest('/api/friends/requests', { method: 'POST', body: JSON.stringify({ username: other.username }) })
-      alert('Connection request sent. Keep your passkey safe and share it out-of-band. After they accept, both of you must enter the exact same passkey to read the chat.')
+      alert('Connection request sent.')
       setSearch('')
       setSearchResults([])
       await loadRequests()
     } catch (error) { alert(error instanceof Error ? error.message : 'Could not send request') }
+  }
+
+  async function configurePersonalPin() {
+    const pin = window.prompt('Set your personal chat PIN (4–12 digits).')
+    if (!pin) return
+    if (!/^[0-9]{4,12}$/.test(pin)) { alert('PIN must contain 4–12 digits.'); return }
+    const confirmPin = window.prompt('Confirm your personal chat PIN')
+    if (pin !== confirmPin) { alert('PINs do not match.'); return }
+    const securityAnswer = window.prompt('Security question: What was the name of your first school?')
+    if (!securityAnswer) return
+    try {
+      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'set', pin, securityAnswer }) })
+      alert('Personal chat PIN saved.')
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not save PIN') }
   }
 
   async function respondToRequest(request: ConnectionRequest, action: 'accept' | 'decline' | 'cancel') {
@@ -229,21 +242,26 @@ export default function ChatApp() {
   }
 
   async function unlockChat() {
-    if (!activeId || passkeyEntry.length < 12) {
-      setPasskeyError('Enter the chat passkey (at least 12 characters).')
+    if (!activeId || !/^[0-9]{4,12}$/.test(personalPinEntry)) {
+      setPasskeyError('Enter your personal 4–12 digit PIN.')
+      return
+    }
+    if (passkeyEntry.length < 12) {
+      setPasskeyError('Enter the shared conversation encryption passphrase (12+ characters).')
       return
     }
     try {
+      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'verify', pin: personalPinEntry }) })
       const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
       const rows = result.messages ?? []
-      // Verify the passkey against an existing message before showing the timeline.
       if (rows.length) await decryptWithPasskeyToString(passkeyEntry, rows[0].ciphertext, rows[0].iv)
       setPasskey(passkeyEntry)
       setPasskeyEntry('')
+      setPersonalPinEntry('')
       setPasskeyError('')
       setShowPasskeyDialog(false)
-    } catch {
-      setPasskeyError('Passkey incorrect, or this conversation contains legacy messages. Check the shared passkey.')
+    } catch (error) {
+      setPasskeyError(error instanceof Error ? error.message : 'Incorrect PIN or conversation passphrase.')
     }
   }
 
@@ -374,7 +392,7 @@ export default function ChatApp() {
               <div className="space-y-3">{requests.map(request=><div key={request.id} className="rounded-2xl border border-slate-100 p-4 shadow-sm"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-pink-500 font-bold text-white">{request.other_username.slice(0,1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">@{request.other_username}</p><p className="text-xs text-slate-400">{request.direction==='incoming'?'Wants to connect with you':'Waiting for acceptance'}</p></div></div><div className="mt-3 flex gap-2">{request.direction==='incoming'?<><button type="button" onClick={()=>void respondToRequest(request,'accept')} className="flex-1 rounded-xl bg-violet-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-violet-700">Accept & chat</button><button type="button" onClick={()=>void respondToRequest(request,'decline')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Decline</button></>:<button type="button" onClick={()=>void respondToRequest(request,'cancel')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel request</button>}</div></div>)}</div>
             </div>
           )}
-          <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 font-black text-white">{(profile?.username?.[0]||'U').toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{profile?.username??'…'}</span><span className="text-[10px] font-medium text-emerald-600">Your account is protected</span></span><ShieldCheck className="h-5 w-5 text-emerald-500"/></div></div>
+          <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 font-black text-white">{(profile?.username?.[0]||'U').toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{profile?.username??'…'}</span><span className="text-[10px] font-medium text-emerald-600">Your account is protected</span></span><button type="button" onClick={()=>void configurePersonalPin()} className="rounded-xl border border-violet-100 bg-white px-3 py-2 text-[11px] font-bold text-violet-700">Set / Change PIN</button><ShieldCheck className="h-5 w-5 text-emerald-500"/></div></div>
         </aside>
 
         <main className={`${activeId?'flex':'hidden md:flex'} relative min-w-0 flex-1 flex-col overflow-hidden bg-[#fbfbfe] newgen-chat-panel`}>
@@ -392,7 +410,7 @@ export default function ChatApp() {
               </header>
               {!isUnlocked ? (
                 <div className="flex flex-1 items-center justify-center overflow-y-auto p-5">
-                  <div className="w-full max-w-[390px] rounded-[30px] border border-slate-100 bg-white p-7 text-center shadow-[0_20px_70px_rgba(76,29,149,.08)]"><div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 text-violet-600"><LockKeyhole className="h-8 w-8"/></div><p className="text-[10px] font-extrabold uppercase tracking-[.22em] text-violet-500">A private room</p><h2 className="mt-2 text-2xl font-black tracking-tight">Unlock this chat</h2><p className="mt-2 text-sm leading-6 text-slate-400">Enter the shared passkey to decrypt messages locally on this device.</p><form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mt-6 space-y-3"><input type="password" autoComplete="off" value={passkeyEntry} onChange={e=>setPasskeyEntry(e.target.value)} placeholder="Enter chat passkey" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>{passkeyError&&<p role="alert" className="text-left text-xs text-rose-600">{passkeyError}</p>}<button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 transition hover:brightness-105">Unlock messages</button></form><p className="mt-5 flex items-center justify-center gap-1.5 text-[10px] leading-4 text-slate-400"><ShieldCheck className="h-3.5 w-3.5 shrink-0"/>Your passkey is never sent to NEWGEN servers.</p></div>
+                  <div className="w-full max-w-[390px] rounded-[30px] border border-slate-100 bg-white p-7 text-center shadow-[0_20px_70px_rgba(76,29,149,.08)]"><div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 text-violet-600"><LockKeyhole className="h-8 w-8"/></div><p className="text-[10px] font-extrabold uppercase tracking-[.22em] text-violet-500">A private room</p><h2 className="mt-2 text-2xl font-black tracking-tight">Unlock this chat</h2><p className="mt-2 text-sm leading-6 text-slate-400">Enter your personal PIN and the conversation encryption passphrase. Your PIN is unique to your account; the encryption passphrase is shared with the other participant.</p><form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mt-6 space-y-3"><input type="password" inputMode="numeric" autoComplete="off" value={personalPinEntry} onChange={e=>setPersonalPinEntry(e.target.value)} placeholder="Personal PIN (4–12 digits)" className="mb-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/><input type="password" autoComplete="off" value={passkeyEntry} onChange={e=>setPasskeyEntry(e.target.value)} placeholder="Conversation encryption passphrase (12+ characters)" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>{passkeyError&&<p role="alert" className="text-left text-xs text-rose-600">{passkeyError}</p>}<button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 transition hover:brightness-105">Unlock messages</button></form><p className="mt-5 flex items-center justify-center gap-1.5 text-[10px] leading-4 text-slate-400"><ShieldCheck className="h-3.5 w-3.5 shrink-0"/>Your passkey is never sent to NEWGEN servers.</p></div>
                 </div>
               ) : (
                 <>
