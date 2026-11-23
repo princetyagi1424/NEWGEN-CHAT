@@ -212,7 +212,10 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
         Spacer(Modifier.height(12.dp))
 
         if (recoverMode) {
-            OutlinedTextField(value = recoveryCode, onValueChange = { recoveryCode = it.trim() }, modifier = Modifier.fillMaxWidth(), label = { Text("One-time recovery code") }, singleLine = true)
+            Text("Recover with your saved recovery code OR your security answer.", color = Muted, fontSize = 12.sp)
+            OutlinedTextField(value = recoveryCode, onValueChange = { recoveryCode = it.trim() }, modifier = Modifier.fillMaxWidth(), label = { Text("One-time recovery code (optional)") }, singleLine = true)
+            Text("OR · What was the name of your first school?", color = White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Security answer (optional)") }, singleLine = true)
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(value = newPassword, onValueChange = { newPassword = it }, modifier = Modifier.fillMaxWidth(), label = { Text("New password") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
         } else {
@@ -222,9 +225,6 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
                 Text("Account recovery question", color = Muted, fontSize = 12.sp)
                 Text("What was the name of your first school?", color = White, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Your answer (case-insensitive)") }, singleLine = true, shape = RoundedCornerShape(14.dp))
-            }
-            if (recoverMode) {
-                OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Answer: What was the name of your first school?") }, singleLine = true)
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -271,7 +271,7 @@ private fun WelcomeScreen(onAuthenticated: (AuthSession) -> Unit) {
             }
         }
         TextButton(onClick = { recoverMode = !recoverMode; error = null; info = null }) {
-            Text(if (recoverMode) "Back to login" else "Forgot password? Use recovery code", color = Muted)
+            Text(if (recoverMode) "Back to login" else "Forgot password? Recover with code or security answer", color = Muted)
         }
         Text("Use at least 10 characters for your account password. Keep your recovery answer private; it cannot unlock chat encryption.", color = Muted, fontSize = 11.sp)
     }
