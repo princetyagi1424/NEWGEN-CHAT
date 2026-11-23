@@ -61,3 +61,17 @@ test('Android and Web sign-out call the server-side session revocation endpoint'
   assert.match(androidUi, /NewgenApi\.logoutAllSessions\(session\.accessToken\)/);
   assert.match(webAuth, /\/api\/auth\/logout/);
 });
+
+test('password recovery revokes sessions, push routes and online presence atomically', () => {
+  const start = server.indexOf("app.post('/api/auth/recover-password'");
+  const end = server.indexOf("// Encrypted media upload/download", start);
+  assert.ok(start >= 0 && end > start);
+  const route = server.slice(start, end);
+  assert.match(route, /const recover = db\.transaction\(\(\) => \{/);
+  assert.match(route, /UPDATE users SET password_hash=\?, token_version=token_version\+1 WHERE id=\?/);
+  assert.match(route, /DELETE FROM account_recovery WHERE user_id=\?/);
+  assert.match(route, /DELETE FROM push_devices WHERE user_id=\?/);
+  assert.match(route, /UPDATE user_presence SET last_seen_at=\?, is_online=0 WHERE user_id=\?/);
+  assert.match(route, /DELETE FROM revoked_tokens WHERE user_id=\? OR expires_at<=\?/);
+  assert.match(route, /recover\(\);/);
+});

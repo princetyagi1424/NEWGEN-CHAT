@@ -473,9 +473,17 @@ app.post('/api/account/recover-password', authLimiter, async (req,res) => {
   }
   if (!verified) return res.status(400).json({error:'Invalid recovery details'});
   const passwordHash = await bcrypt.hash(data.newPassword,12);
-  // Revoke every existing access token when account credentials are recovered.
-  db.prepare('UPDATE users SET password_hash=?, token_version=token_version+1 WHERE id=?').run(passwordHash,user.id);
-  db.prepare('DELETE FROM account_recovery WHERE user_id=?').run(user.id);
+  // Revoke all old sessions and notification routes together. A recovered account
+  // must sign in again before any device can receive new push notifications.
+  const now = Date.now();
+  const recover = db.transaction(() => {
+    db.prepare('UPDATE users SET password_hash=?, token_version=token_version+1 WHERE id=?').run(passwordHash,user.id);
+    db.prepare('DELETE FROM account_recovery WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM push_devices WHERE user_id=?').run(user.id);
+    db.prepare('UPDATE user_presence SET last_seen_at=?, is_online=0 WHERE user_id=?').run(now,user.id);
+    db.prepare('DELETE FROM revoked_tokens WHERE user_id=? OR expires_at<=?').run(user.id,now);
+  });
+  recover();
   res.json({status:'password_reset',message:'Create a new recovery code after login.'});
 });
 

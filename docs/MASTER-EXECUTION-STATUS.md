@@ -20,7 +20,8 @@ The `main` branch has not been force-updated. Merge only the latest branch head 
 4. Chat PIN verification now returns a real success response. PIN and security-answer attempts are atomically rate-limited account-wide across devices/IPs.
 5. Group ownership can be transferred only by the current owner; an owner or another admin cannot be removed by a non-owner.
 6. UI controls for not-yet-implemented Web calling, attachments and More options are disabled instead of presenting dead clickable actions.
-7. CI explicitly runs Web TypeScript validation before the production build; backend uses its lockfile-based clean install. Web dependency install uses `npm install` because this repository does not include a Web package lockfile.
+7. JWT sessions now support one-device logout via jti revocation and all-device logout via token-version rotation. Password recovery and logout-all remove push registrations and mark presence offline. Android explicit logout/account deletion clears local passkey/media storage.
+8. CI explicitly runs Web TypeScript validation before the production build; backend uses its lockfile-based clean install. Web dependency install uses `npm install` because this repository does not include a Web package lockfile.
 8. Regression tests and security/external-blocker documentation have been added or updated.
 
 ## Latest CI snapshot

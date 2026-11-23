@@ -41,6 +41,8 @@ Working branch: `fix/web-device-key-persistence`
 - Removed direct browser INSERT/UPDATE/DELETE access for conversations, membership rows and messages; mutations use authenticated server APIs.
 - Fixed the Chat PIN handler's malformed success path that had placed the verification response inside a line comment.
 - Replaced the PIN check-then-insert race with a transaction-scoped PostgreSQL advisory lock and account-wide quota. Eight attempts are allowed per account in a 15-minute window, across IPs/devices; successful verification clears that account's attempt window.
+- Added server-side JWT session revocation: normal logout revokes the current jti, logout-all increments the token version, and both remove push registrations / mark offline as appropriate. Password recovery now also clears all registered push routes and presence atomically while revoking all sessions.
+- Android explicit logout/account deletion clears the local SessionStore, encrypted ChatPasskeyStore and decrypted private media cache. A failed session restore clears only the token so temporary connectivity failure cannot destroy local message keys.
 - Hardened group ownership: only the owner can transfer ownership or remove another admin; the current owner cannot be removed before transfer.
 - Added regression tests for these cases and explicit Web TypeScript validation in CI.
 - Disabled Web actions that were shown but had no implementation.
