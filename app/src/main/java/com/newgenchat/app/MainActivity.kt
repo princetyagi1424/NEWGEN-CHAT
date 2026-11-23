@@ -837,6 +837,7 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
     val mediaStore = remember(context) { PrivateMediaStore(context) }
     var passkeyInput by remember { mutableStateOf("") }
     var passkeyRing by remember { mutableStateOf<List<String>>(emptyList()) }
+    var useManualPasskey by remember { mutableStateOf(false) }
     var chatKey by remember { mutableStateOf<CharArray?>(null) }
     var draft by remember { mutableStateOf("") }
     var messages by remember { mutableStateOf<List<RenderedMessage>>(emptyList()) }
@@ -866,8 +867,8 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(context) { passkeyRing = withContext(Dispatchers.IO) { ChatPasskeyStore.loadAll(context) } }
-    LaunchedEffect(target.id, passkeyRing) {
-        if (chatKey == null && passkeyRing.isNotEmpty()) chatKey = passkeyRing.first().toCharArray()
+    LaunchedEffect(target.id, passkeyRing, useManualPasskey) {
+        if (chatKey == null && passkeyRing.isNotEmpty() && !useManualPasskey) chatKey = passkeyRing.first().toCharArray()
     }
 
     fun lockConversation() {
@@ -1088,7 +1089,10 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
                 Icon(Icons.Default.Lock, null, tint = Mint, modifier = Modifier.size(44.dp))
                 Spacer(Modifier.height(14.dp))
                 Text("Conversation is encrypted", color = White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                Text(if (passkeyRing.isNotEmpty()) "Your saved master passkey is being used across chats." else "Enter a passkey, then save it in Settings as your master passkey for all chats.", color = Muted, fontSize = 13.sp)
+                Text(if (passkeyRing.isNotEmpty() && !useManualPasskey) "Your saved master passkey is being used across chats." else "Enter a passkey, then save it in Settings as your master passkey for all chats.", color = Muted, fontSize = 13.sp)
+                if (passkeyRing.isNotEmpty() && !useManualPasskey) {
+                    TextButton(onClick = { useManualPasskey = true }) { Text("Use another / older passkey", color = Mint) }
+                }
                 if (pendingAttachmentUri != null) Text("A file is selected. Unlock to encrypt and send it.", color = Mint, fontSize = 12.sp)
                 Spacer(Modifier.height(18.dp))
                 OutlinedTextField(value = passkeyInput, onValueChange = { passkeyInput = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Chat passkey · 12+ characters") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
@@ -1190,7 +1194,10 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
                     }
                 }) { Icon(Icons.Default.Send, "Send encrypted message", tint = Mint) }
             }
-            TextButton(onClick = { lockConversation() }, modifier = Modifier.align(Alignment.End)) { Text("Lock conversation", color = Mint) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { lockConversation(); useManualPasskey = true }) { Text("Switch passkey", color = Muted) }
+                TextButton(onClick = { lockConversation(); useManualPasskey = false }) { Text("Lock conversation", color = Mint) }
+            }
         }
     }
 
