@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { LogOut, MessageCircle, Search, Send, Users, Circle } from 'lucide-react'
-import { useAuth } from '../lib/auth'
+import { getAuthToken, useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { encryptAesGcm, decryptAesGcmToString, generateConversationKey, exportAesKey, importAesKey } from '../crypto/keys'
 import { getConversationKeyB64, storeConversationKey } from '../lib/localStore'
@@ -97,12 +97,33 @@ export default function ChatApp() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typingUsers])
 
   useEffect(() => {
-    if (!search.trim() || search.trim().length < 2) { setSearchResults([]); return }
-    const t = setTimeout(async () => {
-      const { data } = await supabase.from('profiles').select('*').ilike('username', `%${search.trim().toLowerCase()}%`).neq('id', user?.id ?? '').limit(8)
-      setSearchResults((data as Profile[]) ?? [])
+    const query = search.trim().toLowerCase()
+    if (!query || query.length < 2) { setSearchResults([]); return }
+    let cancelled = false
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      try {
+        const token = getAuthToken()
+        if (!token) throw new Error('Please sign in again')
+        const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(result.error || 'Could not search users')
+        if (!cancelled) setSearchResults((result.users ?? []).map((p: { id: string; username: string }) => ({
+          id: p.id, username: p.username, display_name: p.username, avatar_url: null, bio: null,
+          created_at: '', updated_at: '', last_seen_at: null,
+        })) as Profile[])
+      } catch (error) {
+        if (!cancelled && !(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error('User search failed:', error)
+          setSearchResults([])
+        }
+      }
     }, 250)
-    return () => clearTimeout(t)
+    return () => { cancelled = true; window.clearTimeout(timer); controller.abort() }
   }, [search, user?.id])
 
   async function startDirectChat(other: Profile) {
