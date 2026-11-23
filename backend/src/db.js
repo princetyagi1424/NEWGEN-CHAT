@@ -128,3 +128,31 @@ CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices(user_id);
 const securityColumns = new Set(db.pragma('table_info(users)').map(column => column.name));
 if (!securityColumns.has('security_question')) db.exec('ALTER TABLE users ADD COLUMN security_question TEXT');
 if (!securityColumns.has('security_answer_hash')) db.exec('ALTER TABLE users ADD COLUMN security_answer_hash TEXT');
+
+
+// Device identity and recipient-specific conversation-key envelopes.
+// The API stores public keys and ciphertext only; private keys and plaintext
+// conversation keys must remain on the clients.
+db.exec(`
+CREATE TABLE IF NOT EXISTS device_keys (
+ device_id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ public_key_b64 TEXT NOT NULL,
+ algorithm TEXT NOT NULL CHECK(algorithm='ECDH-P256-SPKI'),
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_device_keys_user ON device_keys(user_id);
+CREATE TABLE IF NOT EXISTS key_envelopes (
+ conversation_id TEXT NOT NULL,
+ sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ recipient_device_id TEXT NOT NULL REFERENCES device_keys(device_id) ON DELETE CASCADE,
+ ciphertext TEXT NOT NULL,
+ nonce TEXT NOT NULL,
+ algorithm TEXT NOT NULL CHECK(algorithm='ECDH-P256-HKDF-SHA256-AES-256-GCM'),
+ created_at INTEGER NOT NULL,
+ PRIMARY KEY(conversation_id, recipient_device_id)
+);
+CREATE INDEX IF NOT EXISTS idx_key_envelopes_recipient ON key_envelopes(recipient_id, conversation_id);
+`);
