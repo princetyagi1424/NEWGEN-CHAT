@@ -21,7 +21,8 @@ test('Android plugin aliases referenced by app module exist in version catalog',
   assert.match(appGradle, /alias\(libs\.plugins\.kotlin\.compose\)/);
   assert.match(catalog, /android-application\s*=/);
   assert.match(catalog, /kotlin-compose\s*=/);
-  assert.doesNotMatch(appGradle, /libs\.plugins\.kotlin\.android/);
+  assert.match(appGradle, /alias\(libs\.plugins\.kotlin\.android\)/);
+  assert.match(catalog, /kotlin-android\\s*=/);
 });
 
 test('Android API coroutine dispatcher has an explicit runtime dependency', () => {
