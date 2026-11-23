@@ -7,9 +7,8 @@ export default function AuthPage() {
   const { signIn, signUp, configured, user } = useAuth()
   const navigate = useNavigate()
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -20,15 +19,12 @@ export default function AuthPage() {
     setError(null)
     setBusy(true)
     try {
-      if (mode === 'signin') {
-        const res = await signIn(email, password)
-        if (res.error) setError(res.error)
-        else navigate('/app')
-      } else {
-        const res = await signUp(username, email, password)
-        if (res.error) setError(res.error)
-        else navigate('/app')
-      }
+      const result = mode === 'signin'
+        ? await signIn(username, password)
+        : await signUp(username, password)
+
+      if (result.error) setError(result.error)
+      else navigate('/app')
     } finally {
       setBusy(false)
     }
@@ -43,7 +39,7 @@ export default function AuthPage() {
             NEWGEN CHAT
           </Link>
           <p className="text-sm text-[var(--muted)] mt-2">
-            {mode === 'signin' ? 'Sign in to continue' : 'Create your account'}
+            {mode === 'signin' ? 'Sign in with your username' : 'Create your NEWGEN CHAT account'}
           </p>
         </div>
         {!configured && (
@@ -52,30 +48,46 @@ export default function AuthPage() {
           </div>
         )}
         <form onSubmit={onSubmit} className="space-y-4 p-6 rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
-          {mode === 'signup' && (
-            <div>
-              <label className="block text-xs text-[var(--muted)] mb-1.5">Username</label>
-              <input className="w-full px-3 py-2.5 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)]" value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} />
-            </div>
-          )}
           <div>
-            <label className="block text-xs text-[var(--muted)] mb-1.5">Email</label>
-            <input type="email" className="w-full px-3 py-2.5 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)]" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <label className="block text-xs text-[var(--muted)] mb-1.5">Username</label>
+            <input
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)]"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+              minLength={3}
+              maxLength={24}
+              pattern="[A-Za-z0-9_]+"
+              title="Use 3–24 letters, numbers, or underscores."
+            />
+            <p className="text-xs text-[var(--muted)] mt-1">3–24 characters: letters, numbers, and underscore.</p>
           </div>
           <div>
             <label className="block text-xs text-[var(--muted)] mb-1.5">Password</label>
-            <input type="password" className="w-full px-3 py-2.5 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)]" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+            <input
+              type="password"
+              autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)]"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+            />
           </div>
-          {error && <div className="text-sm text-[var(--danger)]">{error}</div>}
+          {error && <div role="alert" className="text-sm text-[var(--danger)]">{error}</div>}
           <button type="submit" disabled={busy || !configured} className="w-full py-2.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white font-medium">
             {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
         </form>
         <p className="text-center text-sm text-[var(--muted)] mt-6">
           {mode === 'signin' ? (
-            <>No account? <button type="button" className="text-[var(--accent)]" onClick={() => setMode('signup')}>Sign up</button></>
+            <>No account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setMode('signup') }}>Create account</button></>
           ) : (
-            <>Have an account? <button type="button" className="text-[var(--accent)]" onClick={() => setMode('signin')}>Sign in</button></>
+            <>Have an account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setMode('signin') }}>Sign in</button></>
           )}
         </p>
       </div>
