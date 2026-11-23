@@ -23,6 +23,13 @@ export default async function handler(req, res) {
       }
       throw error
     }
+    const { error: profileError } = await db.from('profiles').upsert({
+      id: data.id, username: data.username, display_name: data.username, updated_at: new Date().toISOString()
+    }, { onConflict: 'id' })
+    if (profileError) {
+      console.error('Profile initialization error:', profileError.message)
+      return sendError(res, 503, 'Chat profile database is not initialized. Run web/database/chat-auth-bridge.sql in Supabase SQL Editor.')
+    }
     return res.status(201).json({ user: { id: data.id, username: data.username }, token: issueToken(data) })
   } catch (error) {
     console.error('Register API error:', error.message)
