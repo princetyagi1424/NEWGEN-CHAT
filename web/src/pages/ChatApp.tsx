@@ -202,6 +202,7 @@ export default function ChatApp() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
             <input className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] text-sm outline-none focus:border-[var(--accent)]" placeholder="Search users…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+          {search.trim().length >= 2 && searchResults.length === 0 && <p className="mt-2 px-2 text-xs text-[var(--muted)]">No matching users found.</p>}
           {searchResults.length > 0 && (
             <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] overflow-hidden">
               {searchResults.map((p) => (
