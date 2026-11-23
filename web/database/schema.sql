@@ -18,3 +18,12 @@ REVOKE ALL ON TABLE public.app_users FROM anon, authenticated;
 -- Forward migration for projects where app_users already exists.
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS security_question TEXT;
 ALTER TABLE public.app_users ADD COLUMN IF NOT EXISTS security_answer_hash TEXT;
+
+CREATE TABLE IF NOT EXISTS public.account_recovery_attempts (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  ip_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS account_recovery_attempts_ip_created_idx ON public.account_recovery_attempts (ip_hash, created_at DESC);
+ALTER TABLE public.account_recovery_attempts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.account_recovery_attempts FROM anon, authenticated;
