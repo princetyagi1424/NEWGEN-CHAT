@@ -151,7 +151,7 @@ private fun NewgenApp() {
         val token = withContext(Dispatchers.IO) { SessionStore.load(context) }
         if (!token.isNullOrBlank()) {
             session = runCatching { NewgenApi.restoreSession(token) }.getOrNull()
-            if (session == null) withContext(Dispatchers.IO) { clearLocalAccountState(context) }
+            if (session == null) withContext(Dispatchers.IO) { SessionStore.clear(context) }
         }
         bootstrapping = false
     }
