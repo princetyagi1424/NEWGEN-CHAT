@@ -85,6 +85,17 @@ object NewgenApi {
             session
         }
 
+
+    suspend fun setChatPin(accessToken: String, pin: String, securityAnswer: String) = withContext(Dispatchers.IO) {
+        request("/api/auth/chat-pin", "POST", JSONObject()
+            .put("action", "set").put("pin", pin).put("securityAnswer", securityAnswer), accessToken)
+    }
+
+    suspend fun verifyChatPin(accessToken: String, pin: String) = withContext(Dispatchers.IO) {
+        request("/api/auth/chat-pin", "POST", JSONObject()
+            .put("action", "verify").put("pin", pin), accessToken)
+    }
+
     suspend fun registerPushToken(accessToken: String, token: String) = withContext(Dispatchers.IO) {
         request("/api/push/token", "POST", JSONObject().put("token", token), accessToken)
     }
