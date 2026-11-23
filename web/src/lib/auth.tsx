@@ -112,6 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: profileError.code === '23505' ? 'This username is already taken.' : 'Could not create your profile. Please try again.' }
     }
 
+    await loadProfile(data.user.id)
+
     try {
       const device = await getOrCreateDeviceIdentity()
       await supabase.from('devices').upsert({
@@ -123,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     } catch (e) { console.error(e) }
     return { error: null }
-  }, [configured])
+  }, [configured, loadProfile])
 
   const signIn = useCallback(async (username: string, password: string) => {
     if (!configured) return { error: 'Supabase is not configured.' }
