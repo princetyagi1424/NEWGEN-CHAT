@@ -713,6 +713,9 @@ private fun SettingsPane(
     var confirmPasskey by remember { mutableStateOf("") }
     var passkeyCount by remember { mutableIntStateOf(0) }
     var showPasskey by remember { mutableStateOf(false) }
+    var personalPin by remember { mutableStateOf("") }
+    var confirmPersonalPin by remember { mutableStateOf("") }
+    var securityAnswer by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     LaunchedEffect(session.accessToken) {
         runCatching { NewgenApi.getBlockedUsers(session.accessToken) }.onSuccess { blockedUsers = it }
@@ -722,6 +725,30 @@ private fun SettingsPane(
         Text("Account & privacy", color = White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text("Signed in as @${session.username}", color = Muted, fontSize = 13.sp)
         Spacer(Modifier.height(20.dp))
+        Text("Personal chat unlock PIN", color = White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        Text("Your PIN is unique to your account and can be different from your contact's PIN. Changing it requires your security answer.", color = Muted, fontSize = 12.sp)
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(value = personalPin, onValueChange = { personalPin = it.filter(Char::isDigit).take(12) }, modifier = Modifier.fillMaxWidth(), label = { Text("New PIN · 4–12 digits") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+        OutlinedTextField(value = confirmPersonalPin, onValueChange = { confirmPersonalPin = it.filter(Char::isDigit).take(12) }, modifier = Modifier.fillMaxWidth(), label = { Text("Confirm PIN") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+        OutlinedTextField(value = securityAnswer, onValueChange = { securityAnswer = it }, modifier = Modifier.fillMaxWidth(), label = { Text("First school name · security answer") }, singleLine = true)
+        Button(onClick = {
+            if (personalPin.length !in 4..12) notice = "PIN must contain 4–12 digits."
+            else if (personalPin != confirmPersonalPin) notice = "PINs do not match."
+            else if (securityAnswer.trim().length < 2) notice = "Enter your security answer."
+            else {
+                busy = true
+                scope.launch {
+                    runCatching { NewgenApi.setChatPin(session.accessToken, personalPin, securityAnswer) }
+                        .onSuccess { notice = "Personal chat PIN updated." ; personalPin = ""; confirmPersonalPin = ""; securityAnswer = "" }
+                        .onFailure { notice = it.message ?: "Could not update PIN" }
+                    busy = false
+                }
+            }
+        }, enabled = !busy && personalPin.isNotEmpty() && confirmPersonalPin.isNotEmpty() && securityAnswer.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("Set / Change personal PIN") }
+        notice?.let { Text(it, color = Mint, fontSize = 12.sp) }
+        Spacer(Modifier.height(18.dp))
+        HorizontalDivider(color = Panel2)
+        Spacer(Modifier.height(12.dp))
         Text("Master chat passkey", color = White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         Text(
             if (passkeyCount > 0) "One passkey is used by default for all your chats. ${passkeyCount - 1} previous key(s) are kept encrypted on this device for old messages."
@@ -836,6 +863,7 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
     val context = LocalContext.current
     val mediaStore = remember(context) { PrivateMediaStore(context) }
     var passkeyInput by remember { mutableStateOf("") }
+    var personalPinInput by remember { mutableStateOf("") }
     var passkeyRing by remember { mutableStateOf<List<String>>(emptyList()) }
     var useManualPasskey by remember { mutableStateOf(false) }
     var chatKey by remember { mutableStateOf<CharArray?>(null) }
@@ -867,9 +895,6 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(context) { passkeyRing = withContext(Dispatchers.IO) { ChatPasskeyStore.loadAll(context) } }
-    LaunchedEffect(target.id, passkeyRing, useManualPasskey) {
-        if (chatKey == null && passkeyRing.isNotEmpty() && !useManualPasskey) chatKey = passkeyRing.first().toCharArray()
-    }
 
     fun lockConversation() {
         unlockGeneration++
@@ -879,6 +904,7 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
         transientPasskeys.clear()
         messages = emptyList()
         passkeyInput = ""
+        personalPinInput = ""
         draft = ""
         sending = false
         previewBusy = false
@@ -1089,25 +1115,36 @@ private fun ChatScreen(session: AuthSession, target: ChatTarget, lockRequest: In
                 Icon(Icons.Default.Lock, null, tint = Mint, modifier = Modifier.size(44.dp))
                 Spacer(Modifier.height(14.dp))
                 Text("Conversation is encrypted", color = White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                Text(if (passkeyRing.isNotEmpty() && !useManualPasskey) "Your saved master passkey is being used across chats." else "Enter a passkey, then save it in Settings as your master passkey for all chats.", color = Muted, fontSize = 13.sp)
+                Text(if (passkeyRing.isNotEmpty() && !useManualPasskey) "Enter your personal PIN to unlock with your saved device key." else "Enter your personal PIN and the shared conversation encryption passphrase.", color = Muted, fontSize = 13.sp)
                 if (passkeyRing.isNotEmpty() && !useManualPasskey) {
                     TextButton(onClick = { useManualPasskey = true }) { Text("Use another / older passkey", color = Mint) }
                 }
                 if (pendingAttachmentUri != null) Text("A file is selected. Unlock to encrypt and send it.", color = Mint, fontSize = 12.sp)
                 Spacer(Modifier.height(18.dp))
-                OutlinedTextField(value = passkeyInput, onValueChange = { passkeyInput = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Chat passkey · 12+ characters") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                OutlinedTextField(value = personalPinInput, onValueChange = { personalPinInput = it.filter(Char::isDigit).take(12) }, modifier = Modifier.fillMaxWidth(), label = { Text("Personal PIN · 4–12 digits") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                if (passkeyRing.isEmpty() || useManualPasskey) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = passkeyInput, onValueChange = { passkeyInput = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Conversation encryption passphrase · 12+ chars") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                }
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = {
-                    val key = passkeyInput.toCharArray()
-                    passkeyInput = ""
-                    chatKey = key
-                    val selectedUri = pendingAttachmentUri
-                    if (selectedUri != null) {
-                        val generation = unlockGeneration
-                        pendingAttachmentUri = null
-                        launchAttachmentUpload(selectedUri, key.copyOf(), generation)
+                    scope.launch {
+                        try {
+                            NewgenApi.verifyChatPin(session.accessToken, personalPinInput)
+                            val key = if (passkeyRing.isNotEmpty() && !useManualPasskey) passkeyRing.first().toCharArray() else passkeyInput.toCharArray()
+                            if (key.size < 12) { error = "Enter the conversation encryption passphrase."; return@launch }
+                            passkeyInput = ""
+                            personalPinInput = ""
+                            chatKey = key
+                            val selectedUri = pendingAttachmentUri
+                            if (selectedUri != null) {
+                                val generation = unlockGeneration
+                                pendingAttachmentUri = null
+                                launchAttachmentUpload(selectedUri, key.copyOf(), generation)
+                            }
+                        } catch (e: Exception) { error = e.message ?: "PIN verification failed" }
                     }
-                }, enabled = passkeyInput.length >= 12, modifier = Modifier.fillMaxWidth()) { Text("Unlock chat") }
+                }, enabled = personalPinInput.length in 4..12 && (passkeyRing.isNotEmpty() && !useManualPasskey || passkeyInput.length >= 12), modifier = Modifier.fillMaxWidth()) { Text("Unlock chat") }
                 error?.let { Text(it, color = Danger, fontSize = 12.sp) }
             }
         } else {
