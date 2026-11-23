@@ -53,3 +53,77 @@ export async function decryptAesGcmToString(key: CryptoKey, ciphertextB64: strin
   return textDecoder.decode(await decryptAesGcm(key, ciphertextB64, ivB64))
 }
 export { bufToBase64, base64ToBuf }
+
+const ENVELOPE_INFO = textEncoder.encode('NEWGEN-CHAT device key envelope v1')
+
+async function deriveEnvelopeKey(
+  privateKey: CryptoKey,
+  peerPublicKey: CryptoKey,
+  salt: Uint8Array
+): Promise<CryptoKey> {
+  const shared = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: peerPublicKey },
+    privateKey,
+    256
+  ))
+  try {
+    const material = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey'])
+    return await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt, info: ENVELOPE_INFO },
+      material,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    )
+  } finally {
+    shared.fill(0)
+  }
+}
+
+/**
+ * Wraps a random conversation key to one recipient device. The server should
+ * receive only ciphertext + nonce; sender/recipient device IDs and conversation
+ * ID are authenticated as AES-GCM additional data by the caller-supplied context.
+ */
+export async function wrapConversationKeyForDevice(
+  senderPrivateKey: CryptoKey,
+  recipientPublicKey: CryptoKey,
+  conversationKeyB64: string,
+  context: string
+): Promise<{ ciphertext: string; nonce: string }> {
+  if (!context || context.length > 512) throw new Error('Invalid key-envelope context')
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const nonce = crypto.getRandomValues(new Uint8Array(12))
+  const wrappingKey = await deriveEnvelopeKey(senderPrivateKey, recipientPublicKey, salt)
+  const encrypted = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonce, additionalData: textEncoder.encode(context) },
+    wrappingKey,
+    base64ToBuf(conversationKeyB64)
+  ))
+  const combined = new Uint8Array(salt.length + encrypted.length)
+  combined.set(salt, 0)
+  combined.set(encrypted, salt.length)
+  return { ciphertext: bufToBase64(combined), nonce: bufToBase64(nonce) }
+}
+
+export async function unwrapConversationKeyForDevice(
+  recipientPrivateKey: CryptoKey,
+  senderPublicKey: CryptoKey,
+  ciphertextB64: string,
+  nonceB64: string,
+  context: string
+): Promise<string> {
+  if (!context || context.length > 512) throw new Error('Invalid key-envelope context')
+  const combined = base64ToBuf(ciphertextB64)
+  const nonce = base64ToBuf(nonceB64)
+  if (combined.length < 16 + 16 || nonce.length !== 12) throw new Error('Invalid key envelope')
+  const salt = combined.slice(0, 16)
+  const encrypted = combined.slice(16)
+  const wrappingKey = await deriveEnvelopeKey(recipientPrivateKey, senderPublicKey, salt)
+  const rawKey = new Uint8Array(await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: nonce, additionalData: textEncoder.encode(context) },
+    wrappingKey,
+    encrypted
+  ))
+  try { return bufToBase64(rawKey) } finally { rawKey.fill(0) }
+}
