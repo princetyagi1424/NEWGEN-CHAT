@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0b0f14;
-  --panel: #121821;
-  --panel-2: #1a2230;
-  --border: #243044;
-  --text: #e8eef7;
-  --muted: #9aa8bc;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --warning: #f59e0b;
+  --bg: #f4f7fc;
+  --panel: #ffffff;
+  --panel-2: #edf2f9;
+  --border: #dbe4f0;
+  --text: #17233b;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
 }
 
 * { box-sizing: border-box; }
@@ -25,8 +25,8 @@ body {
 }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2a3548; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #3a4a62; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 @keyframes message-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
