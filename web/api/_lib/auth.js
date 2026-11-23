@@ -1,11 +1,15 @@
-import { neon } from '@neondatabase/serverless'
+import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { randomUUID } from 'node:crypto'
 
-export function getSql() {
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not configured')
-  return neon(process.env.DATABASE_URL)
+export function getDb() {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !serviceKey) throw new Error('Supabase server credentials are not configured')
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+  })
 }
 export function getJwtSecret() {
   const secret = process.env.JWT_SECRET
@@ -21,15 +25,6 @@ export function validateCredentials(body) {
   if (!/^[a-z0-9_]{3,24}$/.test(username)) return { error: 'Username must be 3–24 letters, numbers, or underscores.' }
   if (password.length < 10 || Buffer.byteLength(password, 'utf8') > 72) return { error: 'Password must be 10–72 characters (maximum 72 UTF-8 bytes).' }
   return { username, password }
-}
-export async function ensureAuthSchema(sql) {
-  await sql`CREATE TABLE IF NOT EXISTS app_users (
-    id uuid PRIMARY KEY,
-    username varchar(24) NOT NULL UNIQUE,
-    password_hash text NOT NULL,
-    created_at timestamptz NOT NULL DEFAULT now(),
-    token_version integer NOT NULL DEFAULT 0
-  )`
 }
 export function issueToken(user) {
   return jwt.sign({ sub: user.id, username: user.username, ver: Number(user.token_version || 0) }, getJwtSecret(), {
