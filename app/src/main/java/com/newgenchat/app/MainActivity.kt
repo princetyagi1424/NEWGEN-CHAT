@@ -373,54 +373,107 @@ private fun ChatsPane(
     var selectedMembers by remember { mutableStateOf(setOf<String>()) }
     var creating by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var search by remember { mutableStateOf("") }
+    var showCreateGroup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-        Text("Messages", color = White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(8.dp))
-        if (loading && friends.isEmpty() && groups.isEmpty()) Text("Loading your chats…", color = Muted)
-        if (friends.isEmpty() && groups.isEmpty() && !loading) Text("No chats yet. Add a friend in the Friends tab to start.", color = Muted, fontSize = 13.sp)
-        LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(friends, key = { "friend-${it.id}" }) { friend ->
-                ChatListRow(friend.username, "Direct conversation", onClick = { onOpenChat(ChatTarget(friend.id, friend.username)) })
+    val filteredFriends = friends.filter { it.username.contains(search.trim(), ignoreCase = true) }
+    Column(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 18.dp)) {
+        OutlinedTextField(
+            value = search, onValueChange = { search = it },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            placeholder = { Text("Search users or conversations…") },
+            leadingIcon = { Text("⌕", color = Muted, fontSize = 24.sp) },
+            singleLine = true, shape = RoundedCornerShape(18.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = Color(0xFFF2EFF8),
+                focusedContainerColor = Color.White,
+                unfocusedBorderColor = Color(0xFFECE6F5),
+                focusedBorderColor = Mint
+            )
+        )
+        Spacer(Modifier.height(18.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Your circle", color = White, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text("${friends.size} friends", color = Muted, fontSize = 11.sp)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(58.dp)) {
+                Box(Modifier.size(54.dp).clip(CircleShape).background(Panel2), contentAlignment = Alignment.Center) {
+                    Text("+", color = Mint, fontSize = 27.sp, fontWeight = FontWeight.Light)
+                }
+                Spacer(Modifier.height(5.dp))
+                Text("Your story", color = Muted, fontSize = 10.sp, maxLines = 1)
             }
-            items(groups, key = { "group-${it.id}" }) { group ->
+            friends.take(12).forEach { friend ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(58.dp).clickable { onOpenChat(ChatTarget(friend.id, friend.username)) }) {
+                    Box(Modifier.size(54.dp).clip(CircleShape).background(Mint).padding(2.dp).clip(CircleShape).background(Panel), contentAlignment = Alignment.Center) {
+                        Text(friend.username.take(1).uppercase(), color = Mint, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(5.dp))
+                    Text(friend.username, color = Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Messages", color = White, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = { showCreateGroup = !showCreateGroup }) {
+                Text(if (showCreateGroup) "Close" else "+ New group", color = Mint, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+        if (loading && friends.isEmpty() && groups.isEmpty()) Text("Loading your chats…", color = Muted, fontSize = 13.sp)
+        LazyColumn(Modifier.weight(1f, fill = true), verticalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+            items(filteredFriends, key = { "friend-${it.id}" }) { friend ->
+                ChatListRow(friend.username, "Private conversation", onClick = { onOpenChat(ChatTarget(friend.id, friend.username)) })
+            }
+            items(groups.filter { it.name.contains(search.trim(), ignoreCase = true) }, key = { "group-${it.id}" }) { group ->
                 ChatListRow(group.name, "Group conversation", onClick = { onOpenChat(ChatTarget(group.id, group.name, true)) })
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        HorizontalDivider(color = Panel2)
-        Spacer(Modifier.height(10.dp))
-        Text("Create a group", color = White, fontWeight = FontWeight.Bold)
-        OutlinedTextField(value = groupName, onValueChange = { groupName = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Group name") }, singleLine = true)
-        if (friends.isNotEmpty()) {
-            Text("Choose friends", color = Muted, fontSize = 12.sp)
-            friends.forEach { friend ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = friend.id in selectedMembers, onCheckedChange = { checked ->
-                        selectedMembers = if (checked) selectedMembers + friend.id else selectedMembers - friend.id
-                    })
-                    Text(friend.username, color = White)
+            if (filteredFriends.isEmpty() && groups.none { it.name.contains(search.trim(), ignoreCase = true) } && !loading) {
+                item {
+                    Column(Modifier.fillMaxWidth().padding(vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Your conversations start here", color = White, fontWeight = FontWeight.Bold)
+                        Text("Find friends and build your private circle.", color = Muted, fontSize = 12.sp)
+                    }
                 }
             }
         }
-        message?.let { Text(it, color = Mint, fontSize = 12.sp) }
-        Button(
-            onClick = {
-                creating = true; message = null
-                scope.launch {
-                    try {
-                        NewgenApi.createGroup(session.accessToken, groupName.trim(), selectedMembers.toList())
-                        groupName = ""; selectedMembers = emptySet()
-                        message = "Group created. Members must share the same group passkey securely out of band."
-                        onRefresh()
-                    } catch (e: Exception) { message = e.message ?: "Could not create group" }
-                    finally { creating = false }
+        if (showCreateGroup) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Panel).padding(14.dp)) {
+                Text("Create a group", color = White, fontWeight = FontWeight.Bold)
+                OutlinedTextField(value = groupName, onValueChange = { groupName = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Group name") }, singleLine = true, shape = RoundedCornerShape(14.dp))
+                if (friends.isNotEmpty()) {
+                    Text("Choose members", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+                    friends.take(5).forEach { friend ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = friend.id in selectedMembers, onCheckedChange = { checked ->
+                                selectedMembers = if (checked) selectedMembers + friend.id else selectedMembers - friend.id
+                            })
+                            Text(friend.username, color = White, fontSize = 13.sp)
+                        }
+                    }
                 }
-            },
-            enabled = !creating && groupName.isNotBlank(),
-            modifier = Modifier.fillMaxWidth()
-        ) { Text(if (creating) "Creating…" else "Create group") }
-        Spacer(Modifier.height(8.dp))
+                message?.let { Text(it, color = Mint, fontSize = 11.sp) }
+                Button(
+                    onClick = {
+                        creating = true; message = null
+                        scope.launch {
+                            try {
+                                NewgenApi.createGroup(session.accessToken, groupName.trim(), selectedMembers.toList())
+                                groupName = ""; selectedMembers = emptySet(); showCreateGroup = false
+                                message = "Group created. Members must share the same group passkey securely out of band."
+                                onRefresh()
+                            } catch (e: Exception) { message = e.message ?: "Could not create group" }
+                            finally { creating = false }
+                        }
+                    },
+                    enabled = !creating && groupName.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Mint)
+                ) { Text(if (creating) "Creating…" else "Create group") }
+            }
+        }
     }
 }
 
