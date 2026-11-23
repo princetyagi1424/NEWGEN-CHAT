@@ -12,6 +12,7 @@ export default function AuthPage() {
   const [securityAnswer, setSecurityAnswer] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   if (user) navigate('/app', { replace: true })
@@ -25,6 +26,7 @@ export default function AuthPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setInfo(null)
     setBusy(true)
     try {
       const result = mode === 'signin'
@@ -34,6 +36,7 @@ export default function AuthPage() {
           : await recoverAccount(username, securityAnswer, newPassword)
 
       if (result.error) setError(result.error)
+      else if (mode === 'recover') { setInfo('Password reset successfully. Sign in with your new password.'); setMode('signin'); setSecurityAnswer(''); setNewPassword('') }
       else navigate('/app')
     } finally {
       setBusy(false)
@@ -49,7 +52,7 @@ export default function AuthPage() {
             NEWGEN CHAT
           </Link>
           <p className="text-sm text-[var(--muted)] mt-2">
-            {mode === 'signin' ? 'Sign in with your username' : 'Create your NEWGEN CHAT account'}
+            {mode === 'signin' ? 'Sign in with your username' : mode === 'signup' ? 'Create your NEWGEN CHAT account' : 'Recover your account'}
           </p>
         </div>
         <form onSubmit={onSubmit} className="space-y-4 p-6 rounded-2xl border border-[var(--border)] bg-[var(--panel)]">
@@ -93,6 +96,7 @@ export default function AuthPage() {
             </div>
           )}
           {error && <div role="alert" className="text-sm text-[var(--danger)]">{error}</div>}
+          {info && <div role="status" className="text-sm text-[var(--success)]">{info}</div>}
           <button type="submit" disabled={busy || !configured || (mode !== 'signin' && securityAnswer.trim().length < 2) || (mode === 'recover' && newPassword.length < 10)} className="w-full py-2.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white font-medium">
             {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'}
           </button>
