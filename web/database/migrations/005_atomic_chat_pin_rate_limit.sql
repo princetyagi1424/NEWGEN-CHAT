@@ -1,7 +1,8 @@
--- Atomic per-account / per-network PIN and security-answer attempt limiter.
+-- Atomic per-account PIN and security-answer attempt limiter.
 -- Apply after 2026-11-23-chat-unlock-pin.sql using the Supabase SQL Editor.
--- The function uses a transaction-scoped advisory lock so concurrent requests
--- cannot all pass a stale SELECT count and exceed the configured attempt limit.
+-- The function uses a transaction-scoped account-level advisory lock so concurrent
+-- requests from different IPs cannot race or bypass the configured attempt limit.
+-- p_ip_hash is retained for audit/diagnostics, but it is NOT part of the quota key.
 CREATE OR REPLACE FUNCTION public.consume_chat_pin_attempt(
   p_user_id UUID,
   p_ip_hash TEXT,
@@ -26,7 +27,7 @@ BEGIN
   END IF;
 
   PERFORM pg_advisory_xact_lock(
-    hashtextextended(p_user_id::TEXT || ':' || p_ip_hash, 0)
+    hashtextextended(p_user_id::TEXT, 0)
   );
 
   v_cutoff := NOW() - make_interval(secs => p_window_seconds);
@@ -35,7 +36,6 @@ BEGIN
   SELECT COUNT(*)::INTEGER INTO v_count
   FROM public.chat_pin_attempts
   WHERE user_id = p_user_id
-    AND ip_hash = p_ip_hash
     AND created_at >= v_cutoff;
 
   IF v_count >= p_limit THEN

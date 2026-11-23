@@ -27,8 +27,8 @@ function requestIpHash(req) {
 }
 
 async function consumeAttempt(db, userId, ipHash) {
-  // A transaction-scoped advisory lock makes check+insert atomic for the same
-  // account/network pair. This also throttles security-answer checks for PIN changes.
+  // A transaction-scoped account-level advisory lock makes check+insert atomic
+  // across every IP/device so forwarded-IP spoofing cannot evade the PIN limit.
   const { data, error } = await db.rpc('consume_chat_pin_attempt', {
     p_user_id: userId,
     p_ip_hash: ipHash,
@@ -39,9 +39,9 @@ async function consumeAttempt(db, userId, ipHash) {
   return data === true
 }
 
-async function resetAttempts(db, userId, ipHash) {
+async function resetAttempts(db, userId) {
   const { error } = await db.from('chat_pin_attempts').delete()
-    .eq('user_id', userId).eq('ip_hash', ipHash)
+    .eq('user_id', userId)
   if (error) throw error
 }
 
@@ -79,7 +79,7 @@ export default async function handler(req, res) {
       const hash = await bcrypt.hash(pin, 12)
       const { error } = await db.from('app_users').update({ chat_unlock_pin_hash: hash }).eq('id', user.id)
       if (error) throw error
-      await resetAttempts(db, user.id, ipHash)
+      await resetAttempts(db, user.id)
       return res.status(200).json({ status: 'pin_updated' })
     }
 
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
         return sendError(res, 401, 'Incorrect chat PIN.')
       }
       // A successful verification clears consecutive failures for this pair.
-      await resetAttempts(db, user.id, ipHash)
+      await resetAttempts(db, user.id)
       return res.status(200).json({ status: 'verified' })
     }
 

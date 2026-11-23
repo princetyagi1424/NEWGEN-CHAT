@@ -16,11 +16,14 @@ test('PIN verification returns a real success response after clearing attempts',
   assert.ok(successLine > resetLine, 'the success response must execute after resetting attempts');
 });
 
-test('PIN and security-answer attempts use an atomic database rate limiter', () => {
+test('PIN and security-answer attempts use an atomic account-wide database rate limiter', () => {
   assert.match(handler, /db\.rpc\('consume_chat_pin_attempt'/);
   assert.match(handler, /if \(!\(await consumeAttempt\(db, user\.id, ipHash\)\)\)/);
   assert.match(handler, /action === 'set' \|\| action === 'change'[\s\S]*?consumeAttempt/);
   assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /hashtextextended\(p_user_id::TEXT, 0\)/);
+  assert.doesNotMatch(migration, /hashtextextended\(p_user_id::TEXT \|\| ':' \|\| p_ip_hash/);
+  assert.doesNotMatch(migration, /AND ip_hash = p_ip_hash/);
   assert.match(migration, /COUNT\(\*\)::INTEGER/);
   assert.match(migration, /INSERT INTO public\.chat_pin_attempts/);
   assert.match(migration, /REVOKE ALL ON FUNCTION[\s\S]*FROM PUBLIC, anon, authenticated/);
@@ -28,7 +31,10 @@ test('PIN and security-answer attempts use an atomic database rate limiter', () 
 });
 
 test('a correct PIN resets the current user and network attempt window', () => {
-  assert.match(handler, /async function resetAttempts[\s\S]*?\.eq\('user_id', userId\)\.eq\('ip_hash', ipHash\)/);
+  const resetBlock = handler.slice(handler.indexOf('async function resetAttempts'), handler.indexOf('export default'));
+  assert.match(resetBlock, /\.eq\('user_id', userId\)/);
+  assert.doesNotMatch(resetBlock, /ip_hash/);
+  assert.doesNotMatch(handler, /async function resetAttempts[\s\S]*?\.eq\('ip_hash', ipHash\)/);
   const verify = handler.slice(handler.indexOf("if (action === 'verify')"));
   assert.ok(verify.indexOf('await resetAttempts(db, user.id, ipHash)') < verify.indexOf("status: 'verified'"));
 });
