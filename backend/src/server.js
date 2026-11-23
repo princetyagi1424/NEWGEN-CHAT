@@ -695,7 +695,7 @@ app.get('/api/keys/conversations/:conversationId/envelopes', requireAuth, (req, 
 app.use((err,_req,res,_next)=>{
   if (err?.type === 'entity.parse.failed') return res.status(400).json({ error:'Malformed JSON request body' });
   if (err?.type === 'entity.too.large') return res.status(413).json({ error:'Request body is too large' });
-  console.error('Request failed:',err.message);
+  console.error('Request failed:', err?.code || err?.name || 'internal_error');
   res.status(500).json({error:'Internal server error'});
 });
 const port=Number(process.env.PORT||5000),host=process.env.HOST||'127.0.0.1';

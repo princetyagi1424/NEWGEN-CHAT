@@ -99,7 +99,7 @@ export default async function handler(req, res) {
 
     return sendError(res, 400, 'Unsupported action.')
   } catch (error) {
-    console.error('Chat PIN API error:', error.message)
+    console.error('Chat PIN API error:', error?.code || error?.name || 'service_error')
     const code = error?.code || error?.cause?.code
     if (code === '42703' || code === '42P01' || code === '42883' ||
         code === 'PGRST204' || code === 'PGRST205' || code === 'PGRST202') {

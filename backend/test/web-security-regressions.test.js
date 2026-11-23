@@ -11,6 +11,7 @@ const schema = fs.readFileSync(path.join(repo, 'web/supabase/migrations/001_init
 const migration = fs.readFileSync(path.join(repo, 'web/database/migrations/004_membership_rls_hardening.sql'), 'utf8');
 const writeMigration = fs.readFileSync(path.join(repo, 'web/database/migrations/006_server_only_conversation_writes.sql'), 'utf8');
 const server = fs.readFileSync(path.join(root, 'src/server.js'), 'utf8');
+const chatPin = fs.readFileSync(path.join(repo, 'web/api/auth/chat-pin.js'), 'utf8');
 
 test('browser device identity reimports the private key as non-extractable and wipes temporary bytes', () => {
   assert.match(keys, /generateKey\(\{ name: 'ECDH', namedCurve: 'P-256' \}, true/);
@@ -75,4 +76,11 @@ test('existing Supabase projects receive server-only conversation and message wr
   assert.match(writeMigration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.messages FROM anon, authenticated/i);
   assert.match(writeMigration, /ALTER TABLE public\.conversations ENABLE ROW LEVEL SECURITY/i);
   assert.match(writeMigration, /ALTER TABLE public\.messages ENABLE ROW LEVEL SECURITY/i);
+});
+
+test('server error logs do not print raw exception messages', () => {
+  assert.match(server, /console\.error\('Request failed:',\s*err\?\.code \|\| err\?\.name \|\| 'internal_error'\)/);
+  assert.match(chatPin, /console\.error\('Chat PIN API error:', error\?\.code \|\| error\?\.name \|\| 'service_error'\)/);
+  assert.doesNotMatch(server, /console\.error\([^\n]*\.message/);
+  assert.doesNotMatch(chatPin, /console\.error\([^\n]*\.message/);
 });
