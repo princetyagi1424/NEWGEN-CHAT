@@ -42,6 +42,7 @@ export default function ChatApp() {
   const [creatingChat, setCreatingChat] = useState(false)
   const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests'>('chats')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const keyCacheRef = useRef<Map<string, string>>(new Map())
   const activeConv = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
   const isUnlocked = Boolean(passkey && activeId)
   const visibleConversations = conversations.filter(c => Boolean(c.lastMessage))
@@ -266,16 +267,19 @@ export default function ChatApp() {
       setPasskeyError('Enter your personal 4–12 digit PIN.')
       return
     }
-    if (passkeyEntry.length < 12) {
-      setPasskeyError('Enter the shared conversation encryption passphrase (12+ characters).')
+    const cachedKey = keyCacheRef.current.get(activeId)
+    const keyToUse = cachedKey || passkeyEntry
+    if (!keyToUse || keyToUse.length < 12) {
+      setPasskeyError('First unlock on this device needs the conversation encryption passphrase once. Your personal PIN will be used for future unlocks in this session.')
       return
     }
     try {
       await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'verify', pin: personalPinEntry }) })
       const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
       const rows = result.messages ?? []
-      if (rows.length) await decryptWithPasskeyToString(passkeyEntry, rows[0].ciphertext, rows[0].iv)
-      setPasskey(passkeyEntry)
+      if (rows.length) await decryptWithPasskeyToString(keyToUse, rows[0].ciphertext, rows[0].iv)
+      keyCacheRef.current.set(activeId, keyToUse)
+      setPasskey(keyToUse)
       setPasskeyEntry('')
       setPersonalPinEntry('')
       setPasskeyError('')
@@ -451,12 +455,26 @@ export default function ChatApp() {
                 <div className="flex items-center gap-1"><button type="button" title="Audio call (not available yet)" className="hidden rounded-xl p-2.5 text-slate-400 sm:block"><Circle className="h-4 w-4"/></button><button type="button" onClick={()=>isUnlocked?lockChat():setShowPasskeyDialog(true)} className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-extrabold transition ${isUnlocked?'bg-emerald-50 text-emerald-700':'bg-violet-50 text-violet-700 hover:bg-violet-100'}`}>{isUnlocked?<ShieldCheck className="h-4 w-4"/>:<Lock className="h-4 w-4"/>}{isUnlocked?'Unlocked':'Unlock chat'}</button><button type="button" title="More options" className="rounded-xl p-2.5 text-slate-400 hover:bg-slate-100"><MoreHorizontal className="h-5 w-5"/></button></div>
               </header>
               {!isUnlocked ? (
-                <div className="flex flex-1 items-center justify-center overflow-y-auto p-5">
-                  <div className="w-full max-w-[390px] rounded-[30px] border border-slate-100 bg-white p-7 text-center shadow-[0_20px_70px_rgba(76,29,149,.08)]"><div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 text-violet-600"><LockKeyhole className="h-8 w-8"/></div><p className="text-[10px] font-extrabold uppercase tracking-[.22em] text-violet-500">A private room</p><h2 className="mt-2 text-2xl font-black tracking-tight">Unlock this chat</h2><p className="mt-2 text-sm leading-6 text-slate-400">Enter your personal PIN and the conversation encryption passphrase. Your PIN is unique to your account; the encryption passphrase is shared with the other participant.</p><form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mt-6 space-y-3"><input type="password" inputMode="numeric" autoComplete="off" value={personalPinEntry} onChange={e=>setPersonalPinEntry(e.target.value)} placeholder="Personal PIN (4–12 digits)" className="mb-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/><input type="password" autoComplete="off" value={passkeyEntry} onChange={e=>setPasskeyEntry(e.target.value)} placeholder="Conversation encryption passphrase (12+ characters)" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none transition focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>{passkeyError&&<p role="alert" className="text-left text-xs text-rose-600">{passkeyError}</p>}<button type="submit" className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 transition hover:brightness-105">Unlock messages</button></form><p className="mt-5 flex items-center justify-center gap-1.5 text-[10px] leading-4 text-slate-400"><ShieldCheck className="h-3.5 w-3.5 shrink-0"/>Your passkey is never sent to NEWGEN servers.</p></div>
-                </div>
-              ) : (
                 <>
                   <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
+                    <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-violet-500"/> Your private messages are masked</div>
+                    {messages.map(m=><div key={m.id} className={`flex ${m.sender_id===user?.id?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm ${m.sender_id===user?.id?'rounded-br-md bg-violet-100 text-violet-900':'rounded-bl-md border border-slate-100 bg-white text-slate-500'}`}><div className="text-sm tracking-[.18em]">✦ ✦ ✦ ✦ ✦ ✦</div><div className="mt-1 text-right text-[10px] text-slate-400">{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}</div></div></div>)}
+                    {messages.length===0 && <div className="m-auto rounded-3xl bg-white p-8 text-center shadow-sm"><LockKeyhole className="mx-auto h-8 w-8 text-violet-500"/><p className="mt-3 text-sm font-bold text-slate-700">Your private room</p><p className="mt-1 text-xs text-slate-400">Messages will appear here, hidden until you unlock them.</p></div>}
+                    <div ref={bottomRef}/>
+                  </div>
+                  <div className="shrink-0 border-t border-slate-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                    {showPasskeyDialog ? <form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mx-auto max-w-lg space-y-2">
+                      <p className="text-center text-sm font-extrabold text-slate-800">Unlock original messages</p>
+                      <input type="password" inputMode="numeric" autoComplete="off" value={personalPinEntry} onChange={e=>setPersonalPinEntry(e.target.value.replace(/\\D/g,''))} placeholder="Your personal PIN (4–12 digits)" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-violet-300"/>
+                      {!keyCacheRef.current.has(activeId!) && <input type="password" autoComplete="off" value={passkeyEntry} onChange={e=>setPasskeyEntry(e.target.value)} placeholder="Conversation key (first unlock on this device)" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-violet-300"/>}
+                      {passkeyError&&<p role="alert" className="text-xs text-rose-600">{passkeyError}</p>}
+                      <div className="flex gap-2"><button type="button" onClick={()=>{setShowPasskeyDialog(false);setPersonalPinEntry('');setPasskeyEntry('');setPasskeyError('')}} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="flex-1 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-sm font-extrabold text-white">Unlock messages</button></div>
+                    </form> : <button type="button" onClick={()=>setShowPasskeyDialog(true)} className="mx-auto flex w-full max-w-lg items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white"><LockKeyhole className="h-4 w-4"/> Enter personal PIN to view messages</button>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8"ntain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
                     <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-violet-500"/> Messages decrypt only on this device</div>
                     {messages.map(m=>{const mine=m.sender_id===user?.id;return <div key={m.id} className={`message-enter flex ${mine?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}><div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??'✦ ✦ ✦ ✦ ✦ ✦'}</span></div><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}{mine&&<ShieldCheck className="h-3 w-3"/>}</div></div></div>})}
                     <div ref={bottomRef}/>
