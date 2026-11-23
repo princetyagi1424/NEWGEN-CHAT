@@ -92,7 +92,7 @@ export default async function handler(req, res) {
       if (!user.chat_unlock_pin_hash || !(await bcrypt.compare(pin, user.chat_unlock_pin_hash))) {
         return sendError(res, 401, 'Incorrect chat PIN.')
       }
-      // A successful verification clears consecutive failures for this pair.
+      // A successful verification clears consecutive failures for this account.
       await resetAttempts(db, user.id)
       return res.status(200).json({ status: 'verified' })
     }

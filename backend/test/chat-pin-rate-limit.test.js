@@ -36,5 +36,5 @@ test('a correct PIN resets the current user and network attempt window', () => {
   assert.doesNotMatch(resetBlock, /ip_hash/);
   assert.doesNotMatch(handler, /async function resetAttempts[\s\S]*?\.eq\('ip_hash', ipHash\)/);
   const verify = handler.slice(handler.indexOf("if (action === 'verify')"));
-  assert.ok(verify.indexOf('await resetAttempts(db, user.id, ipHash)') < verify.indexOf("status: 'verified'"));
+  assert.ok(verify.indexOf('await resetAttempts(db, user.id)') < verify.indexOf("status: 'verified'"));
 });
