@@ -10,7 +10,7 @@ interface AuthState {
   profile: { id: string; username: string; display_name: string | null } | null
   loading: boolean
   configured: boolean
-  signUp: (username: string, password: string) => Promise<{ error: string | null }>
+  signUp: (username: string, password: string, securityAnswer: string) => Promise<{ error: string | null }>
   signIn: (username: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -65,11 +65,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const signUp = useCallback(async (username: string, password: string) => {
+  const signUp = useCallback(async (username: string, password: string, securityAnswer: string) => {
     try {
       if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) throw new Error('Username must be 3–24 letters, numbers, or underscores.')
       if (password.length < 10) throw new Error('Password must be at least 10 characters.')
-      const data = await authRequest('/api/auth/register', { username: username.trim(), password })
+      const data = await authRequest('/api/auth/register', { username: username.trim(), password, securityAnswer })
       const nextUser = data.user as AppUser
       localStorage.setItem(TOKEN_KEY, data.token)
       localStorage.setItem(USER_KEY, JSON.stringify(nextUser))
