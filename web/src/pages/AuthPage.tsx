@@ -9,6 +9,7 @@ export default function AuthPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [securityAnswer, setSecurityAnswer] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -21,7 +22,7 @@ export default function AuthPage() {
     try {
       const result = mode === 'signin'
         ? await signIn(username, password)
-        : await signUp(username, password)
+        : await signUp(username, password, securityAnswer)
 
       if (result.error) setError(result.error)
       else navigate('/app')
@@ -73,16 +74,24 @@ export default function AuthPage() {
               minLength={10}
             />
           </div>
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-xs text-[var(--muted)] mb-1.5">Security question · Account recovery</label>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5 text-sm">What was the name of your first school?</div>
+              <input type="text" autoComplete="off" className="mt-2 w-full px-3 py-2.5 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)]" placeholder="Your answer" value={securityAnswer} onChange={(e) => setSecurityAnswer(e.target.value)} required minLength={2} maxLength={100} />
+              <p className="text-xs text-[var(--muted)] mt-1">Your answer is hashed. It can reset your account password, not decrypt chats.</p>
+            </div>
+          )}
           {error && <div role="alert" className="text-sm text-[var(--danger)]">{error}</div>}
-          <button type="submit" disabled={busy || !configured} className="w-full py-2.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white font-medium">
+          <button type="submit" disabled={busy || !configured || (mode === 'signup' && securityAnswer.trim().length < 2)} className="w-full py-2.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white font-medium">
             {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
         </form>
         <p className="text-center text-sm text-[var(--muted)] mt-6">
           {mode === 'signin' ? (
-            <>No account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setMode('signup') }}>Create account</button></>
+            <>No account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setSecurityAnswer(''); setMode('signup') }}>Create account</button></>
           ) : (
-            <>Have an account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setMode('signin') }}>Sign in</button></>
+            <>Have an account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setSecurityAnswer(''); setMode('signin') }}>Sign in</button></>
           )}
         </p>
       </div>
