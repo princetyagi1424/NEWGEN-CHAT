@@ -85,7 +85,211 @@ export default function ChatApp() {
       .subscribe(async status => {
         if (status === 'SUBSCRIBED') await channel.track({ user_id: user.id, username: profile?.username, online_at: new Date().toISOString() })
       })
-    return (
+    return () => { void supabase.removeChannel(channel) }
+  }, [user, profile?.username])
+
+  useEffect(() => {
+    if (!activeId || !user) { setMessages([]); return }
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
+        const rows: VisibleMessage[] = []
+        for (const message of result.messages ?? []) {
+          if (!passkey) {
+            rows.push({ ...message, plaintext: undefined, locked: true })
+          } else {
+            try {
+              rows.push({ ...message, plaintext: await decryptWithPasskeyToString(passkey, message.ciphertext, message.iv), locked: false })
+            } catch {
+              rows.push({ ...message, plaintext: undefined, locked: true, decryptError: true })
+            }
+          }
+        }
+        if (!cancelled) setMessages(rows)
+      } catch (error) {
+        if (!cancelled) console.error('Load messages failed:', error)
+      }
+    }
+    void refresh()
+    const poll = window.setInterval(() => { void refresh() }, 2500)
+    return () => { cancelled = true; window.clearInterval(poll) }
+  }, [activeId, passkey, user, apiRequest])
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  useEffect(() => {
+    const lock = () => lockChat()
+    const onVisibility = () => { if (document.visibilityState !== 'visible') lock() }
+    window.addEventListener('pagehide', lock)
+    window.addEventListener('blur', lock)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', lock)
+      window.removeEventListener('blur', lock)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [lockChat])
+
+  useEffect(() => {
+    const query = search.trim().toLowerCase()
+    if (!query || query.length < 2) { setSearchResults([]); return }
+    let cancelled = false
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      try {
+        const token = getAuthToken()
+        if (!token) throw new Error('Please sign in again')
+        const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+          signal: controller.signal,
+          cache: 'no-store',
+        })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(result.error || 'Could not search users')
+        if (!cancelled) setSearchResults((result.users ?? []).map((p: { id: string; username: string }) => ({
+          id: p.id, username: p.username, display_name: p.username, avatar_url: null, bio: null,
+          created_at: '', updated_at: '', last_seen_at: null,
+        })) as Profile[])
+      } catch (error) {
+        if (!cancelled && !(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error('User search failed:', error)
+          setSearchResults([])
+        }
+      }
+    }, 250)
+    return () => { cancelled = true; window.clearTimeout(timer); controller.abort() }
+  }, [search, user?.id])
+
+  async function sendConnectionRequest(other: Profile) {
+    const chosenPasskey = window.prompt('Create a strong chat passkey (12+ characters). Remember it and share it with this person only through a separate secure channel. NEWGEN will not store or send it.')
+    if (!chosenPasskey) return
+    if (chosenPasskey.length < 12) { alert('Passkey must contain at least 12 characters.'); return }
+    try {
+      await apiRequest('/api/friends/requests', { method: 'POST', body: JSON.stringify({ username: other.username }) })
+      alert('Connection request sent. Keep your passkey safe and share it out-of-band. After they accept, both of you must enter the exact same passkey to read the chat.')
+      setSearch('')
+      setSearchResults([])
+      await loadRequests()
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not send request') }
+  }
+
+  async function respondToRequest(request: ConnectionRequest, action: 'accept' | 'decline' | 'cancel') {
+    try {
+      await apiRequest('/api/friends/requests', { method: 'PATCH', body: JSON.stringify({ request_id: request.id, action }) })
+      await loadRequests()
+      if (action === 'accept') {
+        const other: Profile = { id: request.other_user_id, username: request.other_username, display_name: request.other_username, avatar_url: null, bio: null, created_at: '', updated_at: '', last_seen_at: null }
+        await startDirectChat(other)
+      }
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not update request') }
+  }
+
+  async function startDirectChat(other: Profile) {
+    if (!user || creatingChat) return
+    setCreatingChat(true)
+    try {
+      const result = await apiRequest('/api/conversations/direct', {
+        method: 'POST', body: JSON.stringify({ other_user_id: other.id }),
+      })
+      const conv = result.conversation as Conversation
+      const next: ConvWithMeta = {
+        ...conv,
+        members: [{ user_id: user.id, role: 'owner' }, { user_id: other.id, role: 'member' }],
+        otherProfile: other,
+        lastMessage: null,
+      }
+      setConversations(previous => [next, ...previous.filter(item => item.id !== conv.id)])
+      setActiveId(conv.id)
+      setPasskey(null)
+      setShowPasskeyDialog(true)
+      setSearch('')
+      setSearchResults([])
+      setActiveTab('chats')
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not start chat')
+    } finally {
+      setCreatingChat(false)
+    }
+  }
+
+  async function createGroup() {
+    if (!user) return
+    const name = window.prompt('Group name')
+    if (!name?.trim()) return
+    try {
+      const result = await apiRequest('/api/conversations', { method: 'POST', body: JSON.stringify({ name: name.trim() }) })
+      setConversations(previous => [result.conversation, ...previous])
+      setActiveId(result.conversation.id)
+      setPasskey(null)
+      setShowPasskeyDialog(true)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Could not create group')
+    }
+  }
+
+  async function unlockChat() {
+    if (!activeId || passkeyEntry.length < 12) {
+      setPasskeyError('Enter the chat passkey (at least 12 characters).')
+      return
+    }
+    try {
+      const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
+      const rows = result.messages ?? []
+      // Verify the passkey against an existing message before showing the timeline.
+      if (rows.length) await decryptWithPasskeyToString(passkeyEntry, rows[0].ciphertext, rows[0].iv)
+      setPasskey(passkeyEntry)
+      setPasskeyEntry('')
+      setPasskeyError('')
+      setShowPasskeyDialog(false)
+    } catch {
+      setPasskeyError('Passkey incorrect, or this conversation contains legacy messages. Check the shared passkey.')
+    }
+  }
+
+  async function sendMessage() {
+    if (!input.trim() || !activeId || !user || !passkey || sending) return
+    setSending(true)
+    try {
+      const encrypted = await encryptWithPasskey(passkey, input.trim())
+      await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`, {
+        method: 'POST', body: JSON.stringify(encrypted),
+      })
+      setInput('')
+      const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
+      const visible: VisibleMessage[] = []
+      for (const m of result.messages ?? []) {
+        try { visible.push({ ...m, plaintext: await decryptWithPasskeyToString(passkey, m.ciphertext, m.iv), locked: false }) }
+        catch { visible.push({ ...m, locked: true, decryptError: true }) }
+      }
+      setMessages(visible)
+      await loadConversations()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Message could not be sent')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const displayName = (c: ConvWithMeta) => c.type === 'group'
+    ? (c.name || 'Group')
+    : (c.otherProfile?.display_name || c.otherProfile?.username || 'Direct chat')
+
+  function openConversation(id: string) {
+    lockChat()
+    setActiveId(id)
+    setPasskeyEntry('')
+    setPasskeyError('')
+    setShowPasskeyDialog(true)
+  }
+
+  function leaveConversation() {
+    lockChat()
+    setActiveId(null)
+    setShowPasskeyDialog(false)
+  }
+
+  return (
     <div className="h-[100dvh] w-full overflow-hidden bg-[#f6f7fb] text-slate-900 md:p-3">
       <div className="mx-auto flex h-full max-w-[1600px] overflow-hidden bg-white md:rounded-[28px] md:border md:border-slate-200 md:shadow-[0_24px_80px_rgba(15,23,42,.10)]">
         <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-[390px] shrink-0 flex-col border-r border-slate-100 bg-white`}>
