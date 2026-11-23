@@ -33,6 +33,12 @@ export default function ChatApp() {
   const [personalPinEntry, setPersonalPinEntry] = useState('')
   const [passkeyError, setPasskeyError] = useState('')
   const [showPasskeyDialog, setShowPasskeyDialog] = useState(false)
+  const [showPinSetup, setShowPinSetup] = useState(false)
+  const [setupPin, setSetupPin] = useState('')
+  const [setupPinConfirm, setSetupPinConfirm] = useState('')
+  const [setupSecurityAnswer, setSetupSecurityAnswer] = useState('')
+  const [setupPinError, setSetupPinError] = useState('')
+  const [savingPin, setSavingPin] = useState(false)
   const [creatingChat, setCreatingChat] = useState(false)
   const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests'>('chats')
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -174,18 +180,31 @@ export default function ChatApp() {
     } catch (error) { alert(error instanceof Error ? error.message : 'Could not send request') }
   }
 
-  async function configurePersonalPin() {
-    const pin = window.prompt('Set your personal chat PIN (4–12 digits).')
-    if (!pin) return
-    if (!/^[0-9]{4,12}$/.test(pin)) { alert('PIN must contain 4–12 digits.'); return }
-    const confirmPin = window.prompt('Confirm your personal chat PIN')
-    if (pin !== confirmPin) { alert('PINs do not match.'); return }
-    const securityAnswer = window.prompt('Security question: What was the name of your first school?')
-    if (!securityAnswer) return
+  function configurePersonalPin() {
+    setSetupPin('')
+    setSetupPinConfirm('')
+    setSetupSecurityAnswer('')
+    setSetupPinError('')
+    setShowPinSetup(true)
+  }
+
+  async function savePersonalPin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!/^[0-9]{4,12}$/.test(setupPin)) { setSetupPinError('PIN must contain 4–12 digits.'); return }
+    if (setupPin !== setupPinConfirm) { setSetupPinError('Both PIN entries must match.'); return }
+    if (setupSecurityAnswer.trim().length < 2) { setSetupPinError('Enter your security answer.'); return }
+    setSavingPin(true)
+    setSetupPinError('')
     try {
-      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'set', pin, securityAnswer }) })
-      alert('Personal chat PIN saved.')
-    } catch (error) { alert(error instanceof Error ? error.message : 'Could not save PIN') }
+      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'set', pin: setupPin, securityAnswer: setupSecurityAnswer }) })
+      setShowPinSetup(false)
+      setSetupPin('')
+      setSetupPinConfirm('')
+      setSetupSecurityAnswer('')
+      alert('Your personal chat PIN has been saved.')
+    } catch (error) {
+      setSetupPinError(error instanceof Error ? error.message : 'Could not save PIN')
+    } finally { setSavingPin(false) }
   }
 
   async function respondToRequest(request: ConnectionRequest, action: 'accept' | 'decline' | 'cancel') {
@@ -393,11 +412,33 @@ export default function ChatApp() {
               <div className="space-y-3">{requests.map(request=><div key={request.id} className="rounded-2xl border border-slate-100 p-4 shadow-sm"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-pink-500 font-bold text-white">{request.other_username.slice(0,1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">@{request.other_username}</p><p className="text-xs text-slate-400">{request.direction==='incoming'?'Wants to connect with you':'Waiting for acceptance'}</p></div></div><div className="mt-3 flex gap-2">{request.direction==='incoming'?<><button type="button" onClick={()=>void respondToRequest(request,'accept')} className="flex-1 rounded-xl bg-violet-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-violet-700">Accept & chat</button><button type="button" onClick={()=>void respondToRequest(request,'decline')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Decline</button></>:<button type="button" onClick={()=>void respondToRequest(request,'cancel')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel request</button>}</div></div>)}</div>
             </div>
           )}
-          <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 font-black text-white">{(profile?.username?.[0]||'U').toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{profile?.username??'…'}</span><span className="text-[10px] font-medium text-emerald-600">Your account is protected</span></span><button type="button" onClick={()=>void configurePersonalPin()} className="rounded-xl border border-violet-100 bg-white px-3 py-2 text-[11px] font-bold text-violet-700">Set / Change PIN</button><ShieldCheck className="h-5 w-5 text-emerald-500"/></div></div>
+          <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 font-black text-white">{(profile?.username?.[0]||'U').toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{profile?.username??'…'}</span><span className="text-[10px] font-medium text-emerald-600">Your account is protected</span></span><button type="button" onClick={configurePersonalPin} className="rounded-xl border border-violet-100 bg-white px-3 py-2 text-[11px] font-bold text-violet-700">Set / Change PIN</button><ShieldCheck className="h-5 w-5 text-emerald-500"/></div></div>
         </aside>
 
-        <main className={`${activeId?'flex':'hidden md:flex'} relative min-w-0 flex-1 flex-col overflow-hidden bg-[#fbfbfe] newgen-chat-panel`}>
-          {!activeConv ? (
+        <main className={`${activeId || showPinSetup?'flex':'hidden md:flex'} relative min-w-0 flex-1 flex-col overflow-hidden bg-[#fbfbfe] newgen-chat-panel`}>
+          {showPinSetup ? (
+            <section className="flex flex-1 items-center justify-center overflow-y-auto p-5">
+              <div className="w-full max-w-[460px] rounded-[30px] border border-slate-100 bg-white p-7 shadow-[0_20px_70px_rgba(76,29,149,.08)]">
+                <button type="button" onClick={() => setShowPinSetup(false)} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-violet-700"><ArrowLeft className="h-4 w-4"/> Back</button>
+                <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 text-violet-600"><ShieldCheck className="h-8 w-8"/></div>
+                <p className="text-center text-[10px] font-extrabold uppercase tracking-[.22em] text-violet-500">Account privacy</p>
+                <h1 className="mt-2 text-center text-2xl font-black tracking-tight">Create your personal passkey</h1>
+                <p className="mt-2 text-center text-sm leading-6 text-slate-400">This PIN belongs only to your account. You can use a different PIN from the person you chat with. To change it later, verify your security answer.</p>
+                <form onSubmit={savePersonalPin} className="mt-6 space-y-3">
+                  <label className="block text-left text-xs font-bold text-slate-600">New personal PIN</label>
+                  <input required type="password" inputMode="numeric" autoComplete="new-password" maxLength={12} value={setupPin} onChange={e=>setSetupPin(e.target.value.replace(/\D/g,''))} placeholder="4–12 digits" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>
+                  <label className="block text-left text-xs font-bold text-slate-600">Confirm personal PIN</label>
+                  <input required type="password" inputMode="numeric" autoComplete="new-password" maxLength={12} value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value.replace(/\D/g,''))} placeholder="Re-enter your PIN" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>
+                  <label className="block text-left text-xs font-bold text-slate-600">Security question</label>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-600">What was the name of your first school?</div>
+                  <input required type="text" autoComplete="off" value={setupSecurityAnswer} onChange={e=>setSetupSecurityAnswer(e.target.value)} placeholder="Your saved security answer" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>
+                  {setupPinError && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-left text-xs text-rose-600">{setupPinError}</p>}
+                  <button type="submit" disabled={savingPin} className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 disabled:opacity-50">{savingPin?'Saving securely…':'Save personal passkey'}</button>
+                </form>
+                <p className="mt-4 text-center text-[10px] leading-4 text-slate-400">Your PIN is stored as a one-way hash and is never displayed again.</p>
+              </div>
+            </section>
+          ) : !activeConv ? (
             <div className="flex flex-1 items-center justify-center p-8">
               <div className="max-w-md text-center"><div className="mx-auto mb-6 grid h-24 w-24 place-items-center rounded-[32px] bg-gradient-to-br from-violet-100 to-pink-100 text-violet-600"><MessageCircle className="h-10 w-10"/></div><p className="text-xs font-extrabold uppercase tracking-[.24em] text-violet-500">Welcome to your private space</p><h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900">Good conversations.<br/>Better boundaries.</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-400">Choose a chat to continue, or find someone new and build your circle. Your messages stay locked until you unlock them.</p><div className="mt-6 inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white px-4 py-2 text-xs font-semibold text-violet-600 shadow-sm"><ShieldCheck className="h-4 w-4"/> Privacy-first by design</div></div>
             </div>
@@ -417,7 +458,7 @@ export default function ChatApp() {
                 <>
                   <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
                     <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-violet-500"/> Messages decrypt only on this device</div>
-                    {messages.map(m=>{const mine=m.sender_id===user?.id;return <div key={m.id} className={`message-enter flex ${mine?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}><div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??'••••••••'}</span></div><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}{mine&&<ShieldCheck className="h-3 w-3"/>}</div></div></div>})}
+                    {messages.map(m=>{const mine=m.sender_id===user?.id;return <div key={m.id} className={`message-enter flex ${mine?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}><div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??'✦ ✦ ✦ ✦ ✦ ✦'}</span></div><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}{mine&&<ShieldCheck className="h-3 w-3"/>}</div></div></div>})}
                     <div ref={bottomRef}/>
                   </div>
                   <div className="shrink-0 border-t border-slate-100 bg-white/95 px-3 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:px-7 md:py-4">
