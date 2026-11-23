@@ -5,7 +5,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createPublicKey } = require('node:crypto');
 const { z } = require('zod');
 const db = require('./db');
 const { sendGenericPush } = require('./push');
@@ -543,6 +543,126 @@ app.get('/api/status/:statusId/viewers', requireAuth, (req,res) => {
   if(!status || status.user_id!==req.user.id)return res.status(404).json({error:'Status not found'});
   const viewers=db.prepare('SELECT u.id,u.username,v.viewed_at AS viewedAt FROM status_views v JOIN users u ON u.id=v.viewer_id WHERE v.status_id=? ORDER BY v.viewed_at').all(req.params.statusId);
   res.json({viewers});
+});
+
+
+
+// End-to-end key distribution primitives. The server stores public device keys
+// and encrypted per-device key envelopes only; it never receives a private key
+// or a plaintext conversation key.
+const DEVICE_KEY_ALGORITHM = 'ECDH-P256-SPKI';
+const ENVELOPE_ALGORITHM = 'ECDH-P256-HKDF-SHA256-AES-256-GCM';
+function isCanonicalBase64(value) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+  try { const decoded = Buffer.from(value, 'base64'); return decoded.length > 0 && decoded.toString('base64') === value; }
+  catch { return false; }
+}
+function canAccessKeyConversation(userId, conversationId, otherUserId) {
+  if (otherUserId) {
+    if (conversationId !== [userId, otherUserId].sort().join(':')) return false;
+    const relation = friendshipBetween(userId, otherUserId);
+    return Boolean(relation && relation.status === 'accepted');
+  }
+  return Boolean(db.prepare('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?').get(conversationId, userId));
+}
+function canShareKeysWith(userId, otherUserId) {
+  if (userId === otherUserId) return true;
+  const relation = friendshipBetween(userId, otherUserId);
+  if (relation?.status === 'accepted') return true;
+  return Boolean(db.prepare(`SELECT 1 FROM group_members a JOIN group_members b ON a.group_id=b.group_id WHERE a.user_id=? AND b.user_id=? LIMIT 1`).get(userId, otherUserId));
+}
+
+app.put('/api/keys/devices/:deviceId', requireAuth, (req, res) => {
+  const data = validate(z.object({
+    publicKey: z.string().min(80).max(2048),
+    algorithm: z.literal(DEVICE_KEY_ALGORITHM)
+  }), req, res);
+  if (!data) return;
+  if (!isCanonicalBase64(data.publicKey)) return res.status(400).json({ error: 'Invalid public key encoding' });
+  try {
+    const key = createPublicKey({ key: Buffer.from(data.publicKey, 'base64'), format: 'der', type: 'spki' });
+    if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
+      return res.status(400).json({ error: 'Only P-256 ECDH public keys are supported' });
+    }
+  } catch {
+    return res.status(400).json({ error: 'Invalid P-256 public key' });
+  }
+  const now = Date.now();
+  const existing = db.prepare('SELECT user_id FROM device_keys WHERE device_id=?').get(req.params.deviceId);
+  if (existing && existing.user_id !== req.user.id) return res.status(409).json({ error: 'Device identity is already registered' });
+  db.prepare(`INSERT INTO device_keys(device_id,user_id,public_key_b64,algorithm,created_at,updated_at)
+    VALUES(?,?,?,?,?,?) ON CONFLICT(device_id) DO UPDATE SET
+    public_key_b64=excluded.public_key_b64, algorithm=excluded.algorithm, updated_at=excluded.updated_at
+    WHERE device_keys.user_id=excluded.user_id`)
+    .run(req.params.deviceId, req.user.id, data.publicKey, data.algorithm, now, now);
+  res.status(200).json({ deviceId: req.params.deviceId, algorithm: DEVICE_KEY_ALGORITHM, updatedAt: now });
+});
+
+app.get('/api/keys/users/:userId/devices', requireAuth, (req, res) => {
+  if (!canShareKeysWith(req.user.id, req.params.userId)) return res.status(403).json({ error: 'Not allowed to view device keys' });
+  const devices = db.prepare('SELECT device_id AS deviceId,public_key_b64 AS publicKey,algorithm,created_at AS createdAt,updated_at AS updatedAt FROM device_keys WHERE user_id=? ORDER BY created_at').all(req.params.userId);
+  res.json({ devices });
+});
+
+app.delete('/api/keys/devices/:deviceId', requireAuth, (req, res) => {
+  const result = db.prepare('DELETE FROM device_keys WHERE device_id=? AND user_id=?').run(req.params.deviceId, req.user.id);
+  if (!result.changes) return res.status(404).json({ error: 'Device key not found' });
+  res.json({ status: 'device_key_deleted' });
+});
+
+app.put('/api/keys/conversations/:conversationId/envelopes', requireAuth, (req, res) => {
+  const data = validate(z.object({
+    recipientId: z.string().uuid(),
+    recipientDeviceId: z.string().uuid(),
+    ciphertext: z.string().min(24).max(8192),
+    nonce: z.string().min(16).max(64),
+    algorithm: z.literal(ENVELOPE_ALGORITHM)
+  }), req, res);
+  if (!data) return;
+  const group = db.prepare('SELECT id FROM groups_chat WHERE id=?').get(req.params.conversationId);
+  if (group) {
+    const senderMember = db.prepare('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?').get(group.id, req.user.id);
+    const recipientMember = db.prepare('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?').get(group.id, data.recipientId);
+    if (!senderMember || !recipientMember) return res.status(403).json({ error: 'Both users must be current group members' });
+  } else if (!canAccessKeyConversation(req.user.id, req.params.conversationId, data.recipientId)) {
+    return res.status(403).json({ error: 'Conversation access not allowed' });
+  }
+  if (!isCanonicalBase64(data.ciphertext) || !isCanonicalBase64(data.nonce) || Buffer.from(data.nonce, 'base64').length !== 12) {
+    return res.status(400).json({ error: 'Invalid encrypted key envelope' });
+  }
+  const device = db.prepare('SELECT user_id FROM device_keys WHERE device_id=?').get(data.recipientDeviceId);
+  if (!device || device.user_id !== data.recipientId) return res.status(404).json({ error: 'Recipient device key not found' });
+  const existing = db.prepare('SELECT sender_id FROM key_envelopes WHERE conversation_id=? AND recipient_device_id=?')
+    .get(req.params.conversationId, data.recipientDeviceId);
+  if (existing && existing.sender_id !== req.user.id) return res.status(409).json({ error: 'Only the original envelope sender can replace this envelope' });
+  const now = Date.now();
+  db.prepare(`INSERT INTO key_envelopes(conversation_id,sender_id,recipient_id,recipient_device_id,ciphertext,nonce,algorithm,created_at)
+    VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(conversation_id,recipient_device_id) DO UPDATE SET
+    ciphertext=excluded.ciphertext, nonce=excluded.nonce, algorithm=excluded.algorithm, created_at=excluded.created_at
+    WHERE key_envelopes.sender_id=excluded.sender_id`)
+    .run(req.params.conversationId, req.user.id, data.recipientId, data.recipientDeviceId, data.ciphertext, data.nonce, data.algorithm, now);
+  res.status(201).json({ status: 'envelope_stored', conversationId: req.params.conversationId, recipientDeviceId: data.recipientDeviceId });
+});
+
+app.get('/api/keys/conversations/:conversationId/envelopes', requireAuth, (req, res) => {
+  const deviceId = String(req.query.deviceId || '');
+  if (!/^[0-9a-f-]{36}$/i.test(deviceId)) return res.status(400).json({ error: 'A valid deviceId is required' });
+  const device = db.prepare('SELECT user_id FROM device_keys WHERE device_id=?').get(deviceId);
+  if (!device || device.user_id !== req.user.id) return res.status(403).json({ error: 'Device does not belong to this account' });
+  const group = db.prepare('SELECT id FROM groups_chat WHERE id=?').get(req.params.conversationId);
+  if (group) {
+    if (!db.prepare('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?').get(group.id, req.user.id)) return res.status(403).json({ error: 'Not a group member' });
+  } else {
+    const parts = req.params.conversationId.split(':');
+    if (parts.length !== 2 || !parts.includes(req.user.id) || !canAccessKeyConversation(req.user.id, req.params.conversationId, parts.find(id => id !== req.user.id))) {
+      return res.status(403).json({ error: 'Conversation access not allowed' });
+    }
+  }
+  const envelopes = db.prepare(`SELECT sender_id AS senderId,recipient_id AS recipientId,recipient_device_id AS recipientDeviceId,
+    ciphertext,nonce,algorithm,created_at AS createdAt FROM key_envelopes
+    WHERE conversation_id=? AND recipient_id=? AND recipient_device_id=?`)
+    .all(req.params.conversationId, req.user.id, deviceId);
+  res.json({ envelopes });
 });
 
 app.use((err,_req,res,_next)=>{
