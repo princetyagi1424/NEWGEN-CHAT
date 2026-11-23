@@ -6,11 +6,14 @@ export default async function handler(req, res) {
   try {
     const input = validateCredentials(req.body)
     if (input.error) return sendError(res, 400, input.error)
+    const securityAnswer = typeof req.body?.securityAnswer === 'string' ? req.body.securityAnswer.normalize('NFKC').trim().toLowerCase() : ''
+    if (securityAnswer.length < 2 || securityAnswer.length > 100) return sendError(res, 400, 'Security answer must be 2–100 characters')
     const db = getDb()
     const passwordHash = await bcrypt.hash(input.password, 12)
+    const securityAnswerHash = await bcrypt.hash(securityAnswer, 12)
     const id = randomUUID()
     const { data, error } = await db.from('app_users')
-      .insert({ id, username: input.username, password_hash: passwordHash })
+      .insert({ id, username: input.username, password_hash: passwordHash, security_question: 'What was the name of your first school?', security_answer_hash: securityAnswerHash })
       .select('id, username, token_version')
       .single()
     if (error) {
