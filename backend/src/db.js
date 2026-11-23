@@ -123,3 +123,8 @@ CREATE TABLE IF NOT EXISTS push_devices (
 );
 CREATE INDEX IF NOT EXISTS idx_push_devices_user ON push_devices(user_id);
 `);
+
+// Security-question recovery is separate from chat passkeys and recovery keys.
+const securityColumns = new Set(db.pragma('table_info(users)').map(column => column.name));
+if (!securityColumns.has('security_question')) db.exec('ALTER TABLE users ADD COLUMN security_question TEXT');
+if (!securityColumns.has('security_answer_hash')) db.exec('ALTER TABLE users ADD COLUMN security_answer_hash TEXT');
