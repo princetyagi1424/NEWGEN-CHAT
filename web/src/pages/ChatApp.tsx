@@ -15,6 +15,7 @@ type ConvWithMeta = Conversation & {
   lastMessage?: Message | null
 }
 type VisibleMessage = Message & { plaintext?: string; locked?: boolean; decryptError?: boolean }
+type ConnectionRequest = { id: string; other_user_id: string; other_username: string; direction: 'incoming' | 'outgoing'; status: string }
 
 export default function ChatApp() {
   const { user, profile, signOut } = useAuth()
@@ -24,6 +25,7 @@ export default function ChatApp() {
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Profile[]>([])
+  const [requests, setRequests] = useState<ConnectionRequest[]>([])
   const [sending, setSending] = useState(false)
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
   const [passkey, setPasskey] = useState<string | null>(null)
@@ -56,6 +58,14 @@ export default function ChatApp() {
     setMessages(previous => previous.map(m => ({ ...m, plaintext: undefined, locked: true })))
   }, [])
 
+  const loadRequests = useCallback(async () => {
+    if (!user) return
+    try {
+      const result = await apiRequest('/api/friends/requests')
+      setRequests(result.requests ?? [])
+    } catch (error) { console.error('Load connection requests failed:', error) }
+  }, [user, apiRequest])
+
   const loadConversations = useCallback(async () => {
     if (!user) return
     try {
@@ -66,7 +76,7 @@ export default function ChatApp() {
     }
   }, [user, apiRequest])
 
-  useEffect(() => { void loadConversations() }, [loadConversations])
+  useEffect(() => { void loadConversations(); void loadRequests() }, [loadConversations, loadRequests])
 
   useEffect(() => {
     if (!user) return
@@ -150,6 +160,27 @@ export default function ChatApp() {
     }, 250)
     return () => { cancelled = true; window.clearTimeout(timer); controller.abort() }
   }, [search, user?.id])
+
+  async function sendConnectionRequest(other: Profile) {
+    try {
+      await apiRequest('/api/friends/requests', { method: 'POST', body: JSON.stringify({ username: other.username }) })
+      alert('Connection request sent. Chat unlock will be available after they accept.')
+      setSearch('')
+      setSearchResults([])
+      await loadRequests()
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not send request') }
+  }
+
+  async function respondToRequest(request: ConnectionRequest, action: 'accept' | 'decline' | 'cancel') {
+    try {
+      await apiRequest('/api/friends/requests', { method: 'PATCH', body: JSON.stringify({ request_id: request.id, action }) })
+      await loadRequests()
+      if (action === 'accept') {
+        const other: Profile = { id: request.other_user_id, username: request.other_username, display_name: request.other_username, avatar_url: null, bio: null, created_at: '', updated_at: '', last_seen_at: null }
+        await startDirectChat(other)
+      }
+    } catch (error) { alert(error instanceof Error ? error.message : 'Could not update request') }
+  }
 
   async function startDirectChat(other: Profile) {
     if (!user || creatingChat) return
@@ -269,7 +300,7 @@ export default function ChatApp() {
         </div>
         <div className="px-4 pb-3">
           <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-[var(--panel-2)]">
-            {(['chats','stories','discover'] as const).map(tab => (
+            {(['chats','stories','requests'] as const).map(tab => (
               <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`py-2 rounded-xl text-xs font-semibold capitalize transition ${activeTab===tab?'bg-[var(--panel)] shadow-sm text-[var(--text)]':'text-[var(--muted)]'}`}>{tab}</button>
             ))}
           </div>
@@ -284,9 +315,9 @@ export default function ChatApp() {
               {search.trim().length >= 2 && (
                 <div className="mt-2 rounded-2xl border border-[var(--border)] bg-[var(--panel)] overflow-hidden shadow-lg">
                   {searchResults.length ? searchResults.map(p => (
-                    <button key={p.id} type="button" onClick={() => void startDirectChat(p)} disabled={creatingChat} className="w-full text-left px-4 py-3 hover:bg-[var(--panel-2)] flex items-center gap-3 disabled:opacity-50">
+                    <button key={p.id} type="button" onClick={() => void sendConnectionRequest(p)} disabled={creatingChat} className="w-full text-left px-4 py-3 hover:bg-[var(--panel-2)] flex items-center gap-3 disabled:opacity-50">
                       <span className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-white grid place-items-center"><Users className="w-4 h-4"/></span>
-                      <span className="flex-1 min-w-0"><span className="block text-sm font-semibold">@{p.username}</span><span className="text-xs text-[var(--muted)]">Start a passkey-protected chat</span></span>
+                      <span className="flex-1 min-w-0"><span className="block text-sm font-semibold">@{p.username}</span><span className="text-xs text-[var(--muted)]">Send connection request</span></span>
                       <Plus className="w-4 h-4"/>
                     </button>
                   )) : <p className="p-4 text-xs text-[var(--muted)]">No matching users found.</p>}
@@ -315,12 +346,24 @@ export default function ChatApp() {
             <div className="flex items-center gap-2 font-bold mb-2"><Sparkles className="w-5 h-5 text-[var(--accent)]"/> Stories</div>
             <p className="text-sm text-[var(--muted)]">Encrypted photo, video and GIF stories are in the next implementation phase. This screen will not display unencrypted previews.</p>
           </div>
-        ) : (
-          <div className="flex-1 p-6">
-            <div className="font-bold mb-2">Discover people</div>
-            <p className="text-sm text-[var(--muted)]">Search by a unique username above to connect.</p>
+        ) : activeTab === 'requests' ? (
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <h2 className="font-bold">Connection requests</h2>
+            {requests.length === 0 && <p className="text-sm text-[var(--muted)] py-6 text-center">No connection requests yet.</p>}
+            {requests.map(request => (
+              <div key={request.id} className="rounded-2xl border border-[var(--border)] bg-[var(--panel-2)] p-3">
+                <div className="font-semibold text-sm">@{request.other_username}</div>
+                <div className="text-xs text-[var(--muted)] mt-1">{request.direction === 'incoming' ? 'Wants to connect with you' : 'Request sent · Waiting for acceptance'}</div>
+                <div className="flex gap-2 mt-3">
+                  {request.direction === 'incoming' ? <>
+                    <button type="button" onClick={() => void respondToRequest(request, 'accept')} className="px-3 py-2 rounded-xl bg-[var(--accent)] text-white text-xs font-semibold">Accept & start chat</button>
+                    <button type="button" onClick={() => void respondToRequest(request, 'decline')} className="px-3 py-2 rounded-xl bg-[var(--panel)] border border-[var(--border)] text-xs">Decline</button>
+                  </> : <button type="button" onClick={() => void respondToRequest(request, 'cancel')} className="px-3 py-2 rounded-xl bg-[var(--panel)] border border-[var(--border)] text-xs">Cancel request</button>}
+                </div>
+              </div>
+            ))}
           </div>
-        )}
+        ) : null}
         <div className="p-4 border-t border-[var(--border)] flex items-center gap-3">
           <span className="w-9 h-9 rounded-full bg-[var(--panel-2)] grid place-items-center font-bold text-sm">{(profile?.username?.[0] || 'U').toUpperCase()}</span>
           <span className="min-w-0 flex-1"><span className="block text-sm font-semibold truncate">@{profile?.username ?? '…'}</span><span className="text-[10px] text-[var(--muted)]">Account secured</span></span>
