@@ -1,4 +1,4 @@
-import { getSql, ensureAuthSchema, validateCredentials, sendError, bcrypt, randomUUID, issueToken } from '../_lib/auth.js'
+import { getDb, validateCredentials, sendError, bcrypt, randomUUID, issueToken } from '../_lib/auth.js'
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -6,18 +6,21 @@ export default async function handler(req, res) {
   try {
     const input = validateCredentials(req.body)
     if (input.error) return sendError(res, 400, input.error)
-    const sql = getSql()
-    await ensureAuthSchema(sql)
+    const db = getDb()
     const passwordHash = await bcrypt.hash(input.password, 12)
     const id = randomUUID()
-    try {
-      await sql`INSERT INTO app_users (id, username, password_hash) VALUES (${id}, ${input.username}, ${passwordHash})`
-    } catch (error) {
+    const { data, error } = await db.from('app_users')
+      .insert({ id, username: input.username, password_hash: passwordHash })
+      .select('id, username, token_version')
+      .single()
+    if (error) {
       if (error.code === '23505') return sendError(res, 409, 'Username is already taken')
+      if (error.code === '42P01' || error.code === 'PGRST205') {
+        return sendError(res, 503, 'Account database is not initialized. Run web/database/schema.sql in Supabase SQL Editor.')
+      }
       throw error
     }
-    const user = { id, username: input.username }
-    return res.status(201).json({ user, token: issueToken(user) })
+    return res.status(201).json({ user: { id: data.id, username: data.username }, token: issueToken(data) })
   } catch (error) {
     console.error('Register API error:', error.message)
     return sendError(res, 500, 'Account creation is temporarily unavailable')
