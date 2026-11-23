@@ -38,4 +38,10 @@ test('group ownership transfer is restricted to owner and preserves an admin', (
   assert.match(server, /UPDATE group_members SET role='admin'/);
   assert.match(server, /Transfer group ownership before removing the owner/);
   assert.match(server, /Only the group owner can remove another admin/);
+  assert.match(server, /target\.role==='admin' && group\.owner_id!==req\.user\.id && req\.params\.userId!==req\.user\.id/);
+});
+
+test('membership visibility policy correlates the member row to the outer conversation', () => {
+  assert.match(schema, /m2\.conversation_id = conversation_members\.conversation_id/);
+  assert.match(migration, /m2\.conversation_id = conversation_members\.conversation_id/);
 });

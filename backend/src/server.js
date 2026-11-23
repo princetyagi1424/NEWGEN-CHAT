@@ -321,7 +321,7 @@ app.delete('/api/groups/:groupId/members/:userId', requireAuth, (req,res) => {
   if(req.params.userId!==req.user.id && group.owner_id!==req.user.id && actor.role!=='admin')return res.status(403).json({error:'Group admin permission required'});
   const target=db.prepare('SELECT role FROM group_members WHERE group_id=? AND user_id=?').get(req.params.groupId,req.params.userId);
   if(!target)return res.status(404).json({error:'Member not found'});
-  if(target.role==='admin' && group.owner_id!==req.user.id)return res.status(403).json({error:'Only the group owner can remove another admin'});
+  if(target.role==='admin' && group.owner_id!==req.user.id && req.params.userId!==req.user.id)return res.status(403).json({error:'Only the group owner can remove another admin'});
   if(target.role==='admin'){
     const other=db.prepare("SELECT user_id FROM group_members WHERE group_id=? AND role='admin' AND user_id<>? LIMIT 1").get(req.params.groupId,req.params.userId);
     if(!other)return res.status(409).json({error:'A group must retain at least one admin'});
