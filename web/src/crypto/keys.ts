@@ -16,7 +16,7 @@ function base64ToBuf(b64: string): Uint8Array {
 }
 
 export async function generateDeviceKeyPair(): Promise<CryptoKeyPair> {
-  return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey', 'deriveBits'])
+  return crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits'])
 }
 export async function exportPublicKey(key: CryptoKey): Promise<string> {
   return bufToBase64(await crypto.subtle.exportKey('spki', key))
