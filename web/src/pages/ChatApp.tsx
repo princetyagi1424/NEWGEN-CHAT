@@ -290,10 +290,10 @@ export default function ChatApp() {
   }
 
   return (
-    <div className="h-[100dvh] w-full overflow-hidden bg-[#f6f7fb] text-slate-900 md:p-3">
-      <div className="mx-auto flex h-full max-w-[1600px] overflow-hidden bg-white md:rounded-[28px] md:border md:border-slate-200 md:shadow-[0_24px_80px_rgba(15,23,42,.10)]">
-        <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-[390px] shrink-0 flex-col border-r border-slate-100 bg-white`}>
-          <div className="flex items-center justify-between px-5 pb-4 pt-5">
+    <div className="newgen-app-shell h-[100dvh] w-full overflow-hidden bg-[#f6f7fb] text-slate-900 md:p-3">
+      <div className="newgen-app-frame mx-auto flex h-full max-w-[1600px] overflow-hidden bg-white md:rounded-[28px] md:border md:border-slate-200 md:shadow-[0_24px_80px_rgba(15,23,42,.10)]">
+        <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-[390px] shrink-0 flex-col border-r border-slate-100 bg-white newgen-sidebar`}>
+          <div className="newgen-brand-row flex items-center justify-between px-5 pb-4 pt-5">
             <div className="flex items-center gap-3">
               <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 via-fuchsia-500 to-orange-400 text-white shadow-lg shadow-fuchsia-200"><MessageCircle className="h-5 w-5"/></div>
               <div><div className="text-[21px] font-black tracking-tight">NEWGEN</div><div className="text-[10px] font-semibold uppercase tracking-[.22em] text-slate-400">Connect privately</div></div>
@@ -377,14 +377,14 @@ export default function ChatApp() {
           <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 font-black text-white">{(profile?.username?.[0]||'U').toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{profile?.username??'…'}</span><span className="text-[10px] font-medium text-emerald-600">Your account is protected</span></span><ShieldCheck className="h-5 w-5 text-emerald-500"/></div></div>
         </aside>
 
-        <main className={`${activeId?'flex':'hidden md:flex'} relative min-w-0 flex-1 flex-col overflow-hidden bg-[#fbfbfe]`}>
+        <main className={`${activeId?'flex':'hidden md:flex'} relative min-w-0 flex-1 flex-col overflow-hidden bg-[#fbfbfe] newgen-chat-panel`}>
           {!activeConv ? (
             <div className="flex flex-1 items-center justify-center p-8">
               <div className="max-w-md text-center"><div className="mx-auto mb-6 grid h-24 w-24 place-items-center rounded-[32px] bg-gradient-to-br from-violet-100 to-pink-100 text-violet-600"><MessageCircle className="h-10 w-10"/></div><p className="text-xs font-extrabold uppercase tracking-[.24em] text-violet-500">Welcome to your private space</p><h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900">Good conversations.<br/>Better boundaries.</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-400">Choose a chat to continue, or find someone new and build your circle. Your messages stay locked until you unlock them.</p><div className="mt-6 inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white px-4 py-2 text-xs font-semibold text-violet-600 shadow-sm"><ShieldCheck className="h-4 w-4"/> Privacy-first by design</div></div>
             </div>
           ) : (
             <>
-              <header className="z-10 flex min-h-[78px] shrink-0 items-center gap-3 border-b border-slate-100 bg-white/90 px-4 backdrop-blur-xl md:px-7">
+              <header className="newgen-chat-header z-10 flex min-h-[78px] shrink-0 items-center gap-3 border-b border-slate-100 bg-white/90 px-4 backdrop-blur-xl md:px-7">
                 <button type="button" onClick={leaveConversation} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Back"><ArrowLeft className="h-5 w-5"/></button>
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-lg font-black text-white">{displayName(activeConv).slice(0,1).toUpperCase()}</span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-extrabold text-slate-900">{displayName(activeConv)}</span><span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400"><span className={`h-1.5 w-1.5 rounded-full ${activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'bg-emerald-400':'bg-slate-300'}`}/>{isUnlocked?'Unlocked on this device':activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'Online':'Private conversation · locked'}</span></span>
