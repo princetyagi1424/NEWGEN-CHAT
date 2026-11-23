@@ -34,7 +34,7 @@ export default async function handler(req, res) {
         }
         const { data: lastRows, error: lastError } = await db.from('messages').select('id,conversation_id,sender_id,ciphertext,iv,content_type,created_at,expires_at,deleted_at').eq('conversation_id', conv.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(1)
         if (lastError) throw lastError
-        output.push({ ...conv, members: members || [], otherProfile, lastMessage: lastRows?.[0] || null })
+        if (lastRows?.[0]) output.push({ ...conv, members: members || [], otherProfile, lastMessage: lastRows[0] })
       }
       return res.status(200).json({ conversations: output })
     }
