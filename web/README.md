@@ -15,7 +15,7 @@ React + TypeScript + Vite + Tailwind + Supabase.
 
 ## Account login
 
-Users create accounts and sign in with a unique username and password. No email address or phone number is requested or displayed. Supabase Auth internally requires an email-shaped identifier, so the client derives a reserved non-deliverable identifier from the username. It is not a contact address and cannot receive mail.
+Users create accounts and sign in with a unique username and password. No email address or phone number is requested or displayed. Supabase Auth internally requires an email-shaped identifier, so the client derives an internal email-shaped login identifier from the username. Users never enter or see this identifier. Keep email confirmation disabled; this identifier is only for Supabase Auth and is not intended for communication.
 
 Usernames are 3–24 characters and may contain lowercase/uppercase letters, numbers, and underscores. They are stored lowercase.
 
