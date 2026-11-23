@@ -128,28 +128,34 @@ export default function ChatApp() {
 
   async function startDirectChat(other: Profile) {
     if (!user) return
-    const { data: myMemberships } = await supabase.from('conversation_members').select('conversation_id').eq('user_id', user.id)
-    const myConvIds = (myMemberships ?? []).map((m) => m.conversation_id)
-    if (myConvIds.length) {
-      const { data: shared } = await supabase.from('conversation_members').select('conversation_id').eq('user_id', other.id).in('conversation_id', myConvIds)
-      if (shared?.length) {
-        const { data: conv } = await supabase.from('conversations').select('*').eq('id', shared[0].conversation_id).eq('type', 'direct').maybeSingle()
-        if (conv) { setActiveId(conv.id); setSearch(''); setSearchResults([]); return }
+    try {
+      const convKey = await generateConversationKey()
+      const keyB64 = await exportAesKey(convKey)
+      const token = getAuthToken()
+      if (!token) throw new Error('Please sign in again')
+      const response = await fetch('/api/conversations/direct', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ other_user_id: other.id, conversation_key: keyB64 }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok || !result.conversation) throw new Error(result.error || 'Could not start chat')
+      const conv = result.conversation as Conversation
+      const next: ConvWithMeta = {
+        ...conv,
+        members: [{ user_id: user.id, role: 'owner' }, { user_id: other.id, role: 'member' }],
+        otherProfile: other,
+        lastMessage: null,
       }
+      setConversations((prev) => [next, ...prev.filter((item) => item.id !== conv.id)])
+      if (!result.existing) await storeConversationKey(conv.id, keyB64)
+      setActiveId(conv.id)
+      setSearch('')
+      setSearchResults([])
+    } catch (error) {
+      console.error('Start direct chat failed:', error)
+      alert(error instanceof Error ? error.message : 'Could not start chat. Please try again.')
     }
-    const convKey = await generateConversationKey()
-    const keyB64 = await exportAesKey(convKey)
-    const { data: conv, error } = await supabase.from('conversations').insert({ type: 'direct', created_by: user.id }).select().single()
-    if (error || !conv) return
-    await supabase.from('conversation_members').insert([
-      { conversation_id: conv.id, user_id: user.id, role: 'owner', encrypted_conversation_key: keyB64 },
-      { conversation_id: conv.id, user_id: other.id, role: 'member', encrypted_conversation_key: keyB64 },
-    ])
-    await storeConversationKey(conv.id, keyB64)
-    await loadConversations()
-    setActiveId(conv.id)
-    setSearch('')
-    setSearchResults([])
   }
 
   async function createGroup() {
