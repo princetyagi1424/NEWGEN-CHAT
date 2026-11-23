@@ -6,14 +6,21 @@ import { MessageCircle } from 'lucide-react'
 export default function AuthPage() {
   const { signIn, signUp, configured, user } = useAuth()
   const navigate = useNavigate()
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [mode, setMode] = useState<'signin' | 'signup' | 'recover'>('signin')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [securityAnswer, setSecurityAnswer] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   if (user) navigate('/app', { replace: true })
+
+  async function recoverAccount(username: string, answer: string, nextPassword: string) {
+    const response = await fetch(`${((import.meta as any).env?.VITE_API_URL as string | undefined || '').replace(/\\/$/, '')}/api/auth/recover`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: username.trim(), securityAnswer: answer, newPassword: nextPassword }) })
+    const data = await response.json().catch(() => ({}))
+    return { error: response.ok ? null : (data.error || 'Account recovery failed') }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -22,7 +29,9 @@ export default function AuthPage() {
     try {
       const result = mode === 'signin'
         ? await signIn(username, password)
-        : await signUp(username, password, securityAnswer)
+        : mode === 'signup'
+          ? await signUp(username, password, securityAnswer)
+          : await recoverAccount(username, securityAnswer, newPassword)
 
       if (result.error) setError(result.error)
       else navigate('/app')
@@ -62,7 +71,7 @@ export default function AuthPage() {
             />
             <p className="text-xs text-[var(--muted)] mt-1">3–24 characters: letters, numbers, and underscore.</p>
           </div>
-          <div>
+          {mode !== 'recover' && <div>
             <label className="block text-xs text-[var(--muted)] mb-1.5">Password</label>
             <input
               type="password"
@@ -73,25 +82,26 @@ export default function AuthPage() {
               required
               minLength={10}
             />
-          </div>
-          {mode === 'signup' && (
+          </div>}
+          {mode !== 'signin' && (
             <div>
               <label className="block text-xs text-[var(--muted)] mb-1.5">Security question · Account recovery</label>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5 text-sm">What was the name of your first school?</div>
               <input type="text" autoComplete="off" className="mt-2 w-full px-3 py-2.5 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)]" placeholder="Your answer" value={securityAnswer} onChange={(e) => setSecurityAnswer(e.target.value)} required minLength={2} maxLength={100} />
               <p className="text-xs text-[var(--muted)] mt-1">Your answer is hashed. It can reset your account password, not decrypt chats.</p>
+              {mode === 'recover' && <input type="password" autoComplete="new-password" className="mt-2 w-full px-3 py-2.5 rounded-lg bg-[var(--panel-2)] border border-[var(--border)] outline-none focus:border-[var(--accent)]" placeholder="New password (10+ characters)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={10} />}
             </div>
           )}
           {error && <div role="alert" className="text-sm text-[var(--danger)]">{error}</div>}
-          <button type="submit" disabled={busy || !configured || (mode === 'signup' && securityAnswer.trim().length < 2)} className="w-full py-2.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white font-medium">
-            {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+          <button type="submit" disabled={busy || !configured || (mode !== 'signin' && securityAnswer.trim().length < 2) || (mode === 'recover' && newPassword.length < 10)} className="w-full py-2.5 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white font-medium">
+            {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'}
           </button>
         </form>
         <p className="text-center text-sm text-[var(--muted)] mt-6">
           {mode === 'signin' ? (
-            <>No account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setSecurityAnswer(''); setMode('signup') }}>Create account</button></>
+            <>No account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setSecurityAnswer(''); setMode('signup') }}>Create account</button> · <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setSecurityAnswer(''); setMode('recover') }}>Forgot password?</button></>
           ) : (
-            <>Have an account? <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setSecurityAnswer(''); setMode('signin') }}>Sign in</button></>
+            <>Back to <button type="button" className="text-[var(--accent)]" onClick={() => { setError(null); setSecurityAnswer(''); setMode('signin') }}>Sign in</button></>
           )}
         </p>
       </div>
