@@ -39,7 +39,8 @@ export default function ChatApp() {
   const [setupPin, setSetupPin] = useState('')
   const [setupPinConfirm, setSetupPinConfirm] = useState('')
   const [setupSecurityAnswer, setSetupSecurityAnswer] = useState('')
-  const [setupSecurityQuestion, setSetupSecurityQuestion] = useState('What was the name of your first school?')
+  const [setupCurrentPassword, setSetupCurrentPassword] = useState('')
+  const [setupSecurityQuestion, setSetupSecurityQuestion] = useState('Verify with your security answer or current account password')
   const [hasPersonalPin, setHasPersonalPin] = useState(false)
   const [loadingPinSettings, setLoadingPinSettings] = useState(false)
   const [setupPinError, setSetupPinError] = useState('')
@@ -279,6 +280,7 @@ export default function ChatApp() {
     setSetupPin('')
     setSetupPinConfirm('')
     setSetupSecurityAnswer('')
+    setSetupCurrentPassword('')
     setSetupPinError('')
     setShowPinSetup(true)
     setLoadingPinSettings(true)
@@ -297,7 +299,7 @@ export default function ChatApp() {
     event.preventDefault()
     if (!/^[0-9]{4,12}$/.test(setupPin)) { setSetupPinError('PIN must contain 4–12 digits.'); return }
     if (setupPin !== setupPinConfirm) { setSetupPinError('Both PIN entries must match.'); return }
-    if (setupSecurityAnswer.trim().length < 2) { setSetupPinError('Enter your security answer.'); return }
+    if (setupSecurityAnswer.trim().length < 2 && !setupCurrentPassword) { setSetupPinError('Enter your security answer or current account password.'); return }
     setSavingPin(true)
     setSetupPinError('')
     try {
@@ -307,6 +309,7 @@ export default function ChatApp() {
       setSetupPin('')
       setSetupPinConfirm('')
       setSetupSecurityAnswer('')
+      setSetupCurrentPassword('')
       alert('Your personal chat PIN has been saved.')
     } catch (error) {
       setSetupPinError(error instanceof Error ? error.message : 'Could not save PIN')
@@ -581,7 +584,10 @@ export default function ChatApp() {
                   <input required type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={12} value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value.replace(/\D/g,''))} placeholder="Re-enter your PIN" className="pin-mask w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"/>
                   <label className="block text-left text-xs font-bold text-slate-600">Security question</label>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-600">{setupSecurityQuestion}</div>
-                  <input required type="text" autoComplete="off" value={setupSecurityAnswer} onChange={e=>setSetupSecurityAnswer(e.target.value)} placeholder="Your saved security answer" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"/>
+                  <input type="text" autoComplete="off" value={setupSecurityAnswer} onChange={e=>setSetupSecurityAnswer(e.target.value)} placeholder="Security answer (optional)" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"/>
+                  <div className="text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">or</div>
+                  <label className="block text-left text-xs font-bold text-slate-600">Current account password</label>
+                  <input type="password" autoComplete="current-password" value={setupCurrentPassword} onChange={e=>setSetupCurrentPassword(e.target.value)} placeholder="Verify your account password" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"/>
                   {loadingPinSettings && <p className="text-center text-xs text-slate-400">Loading your security settings…</p>}
                   {setupPinError && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-left text-xs text-rose-600">{setupPinError}</p>}
                   <button type="submit" disabled={savingPin || loadingPinSettings} className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-emerald-200 disabled:opacity-50">{savingPin?'Saving securely…':hasPersonalPin?'Update personal PIN':'Set personal PIN'}</button>
