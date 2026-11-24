@@ -36,3 +36,12 @@ test('group membership changes invalidate existing key envelopes', () => {
   assert.match(db, /DELETE FROM key_envelopes WHERE conversation_id=NEW\.group_id/);
   assert.match(db, /DELETE FROM key_envelopes WHERE conversation_id=OLD\.group_id/);
 });
+
+test('browser private-key generation is transient and IndexedDB receives a non-extractable key', () => {
+  const repo = path.resolve(root, '..');
+  const keys = fs.readFileSync(path.join(repo, 'web/src/crypto/keys.ts'), 'utf8');
+  const store = fs.readFileSync(path.join(repo, 'web/src/lib/localStore.ts'), 'utf8');
+  assert.match(keys, /generateKey\(\{ name: 'ECDH', namedCurve: 'P-256' \}, true/);
+  assert.match(store, /importKey\([\s\S]*?false, \['deriveKey', 'deriveBits'\]/);
+  assert.match(store, /privateKeyBytes\.fill\(0\)/);
+});

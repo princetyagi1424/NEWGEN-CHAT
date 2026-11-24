@@ -1,5 +1,4 @@
-import { getDb, sendError, bcrypt, validateCredentials } from '../_lib/auth.js'
-import { createHash } from 'node:crypto'
+import { getDb, sendError, bcrypt, validateCredentials, consumeAuthAttempt } from '../_lib/auth.js'
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -10,15 +9,9 @@ export default async function handler(req, res) {
     const answer = typeof req.body?.securityAnswer === 'string' ? req.body.securityAnswer.normalize('NFKC').trim().toLowerCase() : ''
     if (answer.length < 2 || answer.length > 100) return sendError(res, 400, 'Enter your security answer')
     const db = getDb()
-    const secret = process.env.JWT_SECRET || 'newgen-recovery-throttle'
-    const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim()
-    const ipHash = createHash('sha256').update(secret).update(':').update(ip).digest('hex')
-    await db.from('account_recovery_attempts').delete().lt('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
-    const { count, error: countError } = await db.from('account_recovery_attempts').select('id', { count: 'exact', head: true }).eq('ip_hash', ipHash)
-    if (countError) throw countError
-    if ((count || 0) >= 5) return sendError(res, 429, 'Too many recovery attempts. Try again in 15 minutes.')
-    const { error: insertError } = await db.from('account_recovery_attempts').insert({ ip_hash: ipHash })
-    if (insertError) throw insertError
+    if (!(await consumeAuthAttempt(db, req, input.username, 5))) {
+      return sendError(res, 429, 'Too many recovery attempts. Try again in 15 minutes.')
+    }
     const { data: user, error } = await db.from('app_users').select('id,security_answer_hash,token_version').eq('username', input.username).maybeSingle()
     if (error) throw error
     if (!user?.security_answer_hash || !(await bcrypt.compare(answer, user.security_answer_hash))) {
@@ -29,7 +22,11 @@ export default async function handler(req, res) {
     if (updateError) throw updateError
     return res.status(200).json({ status: 'password_reset', message: 'Password reset. Sign in with your new password.' })
   } catch (error) {
-    console.error('Account recovery API error:', error.message)
+    const code = error?.code || error?.cause?.code
+    if (code === '42883' || code === 'PGRST202' || code === '42P01' || code === 'PGRST205') {
+      return sendError(res, 503, 'Authentication rate-limit database setup is incomplete. Apply migration 008_atomic_web_auth_rate_limit.sql.')
+    }
+    console.error('Account recovery API error:', error?.code || error?.name || 'recovery_failed')
     return sendError(res, 500, 'Account recovery is temporarily unavailable')
   }
 }

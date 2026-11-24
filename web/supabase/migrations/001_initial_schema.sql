@@ -83,33 +83,48 @@ alter table public.messages enable row level security;
 alter table public.message_receipts enable row level security;
 alter table public.push_subscriptions enable row level security;
 
-create policy "profiles_select" on public.profiles for select to authenticated using (true);
-create policy "profiles_insert" on public.profiles for insert to authenticated with check (auth.uid() = id);
-create policy "profiles_update" on public.profiles for update to authenticated using (auth.uid() = id);
+-- Profiles contain privacy-sensitive metadata (including last_seen_at).
+-- The custom-account Vercel APIs use service_role; browser clients must not
+-- enumerate profiles or bypass those APIs.
+DROP POLICY IF EXISTS "profiles_select" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_insert" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update" ON public.profiles;
+REVOKE ALL ON TABLE public.profiles FROM anon, authenticated;
 
 create policy "devices_own" on public.devices for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "conv_select" on public.conversations for select to authenticated using (
   exists (select 1 from public.conversation_members m where m.conversation_id = id and m.user_id = auth.uid())
 );
-create policy "conv_insert" on public.conversations for insert to authenticated with check (auth.uid() = created_by);
+-- Conversation creation and message writes are performed by authenticated server APIs.
+-- Do not permit direct browser writes that bypass API validation and authorization.
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.conversations FROM anon, authenticated;
+GRANT SELECT ON TABLE public.conversations TO authenticated;
 
+-- The browser may read only its own membership row. Authorized server APIs
+-- return group member lists using the server-only service role.
 create policy "members_select" on public.conversation_members for select to authenticated using (
-  user_id = auth.uid() or exists (select 1 from public.conversation_members m2 where m2.conversation_id = conversation_id and m2.user_id = auth.uid())
+  user_id = auth.uid()
 );
-create policy "members_insert" on public.conversation_members for insert to authenticated with check (
-  auth.uid() = user_id or exists (select 1 from public.conversation_members m where m.conversation_id = conversation_id and m.user_id = auth.uid() and m.role in ('owner','admin'))
-);
-create policy "members_update" on public.conversation_members for update to authenticated using (user_id = auth.uid());
+-- Membership writes are intentionally server-only. The API authenticates the caller
+-- and checks friendship/group-role rules before changing membership. A client must
+-- not be able to self-join a known conversation or promote its own role.
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.conversation_members FROM anon, authenticated;
+GRANT SELECT ON TABLE public.conversation_members TO authenticated;
 
 create policy "messages_select" on public.messages for select to authenticated using (
   exists (select 1 from public.conversation_members m where m.conversation_id = messages.conversation_id and m.user_id = auth.uid())
 );
-create policy "messages_insert" on public.messages for insert to authenticated with check (
-  auth.uid() = sender_id and exists (select 1 from public.conversation_members m where m.conversation_id = conversation_id and m.user_id = auth.uid())
-);
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.messages FROM anon, authenticated;
+GRANT SELECT ON TABLE public.messages TO authenticated;
 
-create policy "receipts_own" on public.message_receipts for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- Receipts are written only by an authenticated server API after verifying
+-- message recipient and conversation membership. Browser clients may read only
+-- receipt rows assigned to their own user ID; direct writes could forge read state.
+DROP POLICY IF EXISTS "receipts_own" ON public.message_receipts;
+CREATE POLICY "receipts_select_own" ON public.message_receipts FOR SELECT TO authenticated USING (auth.uid() = user_id);
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.message_receipts FROM anon, authenticated;
+GRANT SELECT ON TABLE public.message_receipts TO authenticated;
 create policy "push_own" on public.push_subscriptions for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- After tables exist, enable Realtime in Dashboard or:

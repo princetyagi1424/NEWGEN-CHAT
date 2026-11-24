@@ -1,27 +1,72 @@
 # NEWGEN CHAT — Web
 
-React + TypeScript + Vite + Tailwind. The username/password account API runs as Vercel Functions in this same project; no separate backend deployment is needed for account authentication.
+React + TypeScript + Vite + Tailwind. The browser app is deployed from `web/` on Vercel. Account and chat APIs run as Vercel Functions and use Supabase through the server-only service-role client.
 
-## Vercel setup
+## Vercel deployment
 
-1. Keep the Vercel project Root Directory set to `web`.
-2. In Vercel Marketplace, create/connect a Neon PostgreSQL database to this Vercel project.
-3. In Vercel Project Settings → Environment Variables, add `JWT_SECRET` with a cryptographically random value of at least 32 characters. Neon integration supplies `DATABASE_URL`; ensure it is available to the Production deployment.
-4. Redeploy. The account table `app_users` is created automatically on first API request. Its schema is also in `database/schema.sql`.
-5. The web app calls `/api/auth/register`, `/api/auth/login`, and `/api/me` on the same domain. No `VITE_API_URL` is required.
+1. Set the Vercel project's Root Directory to `web`.
+2. Connect the Supabase project used by the app.
+3. Configure the environment variables below for the appropriate Vercel environments.
+4. Apply the database schema and migrations in the order shown below.
+5. Deploy the web project.
+
+### Environment variables
+
+**Server-only Vercel variables — never expose with a `VITE_` prefix:**
+
+- `SUPABASE_URL`: Supabase project URL.
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase service-role/secret key. Keep this only in Vercel server-side environment settings.
+- `JWT_SECRET`: random secret with at least 32 characters, used to sign application session tokens.
+
+**Browser-visible variables:**
+
+- `VITE_SUPABASE_URL`: Supabase project URL used by the browser Realtime presence client.
+- `VITE_SUPABASE_ANON_KEY`: Supabase publishable/anon key. This key is public by design; table access must remain protected by RLS.
+
+Never put `SUPABASE_SERVICE_ROLE_KEY` or `JWT_SECRET` in `.env.local` variables prefixed with `VITE_`, source code, or browser bundles.
+
+## Database setup and migrations
+
+For a new project, run these SQL files in the Supabase SQL Editor in this order:
+
+1. `web/supabase/migrations/001_initial_schema.sql` — creates the profile, conversation, membership, message and related tables.
+2. `web/database/schema.sql` — creates the custom username/password `app_users` account and security tables.
+3. `web/database/chat-auth-bridge.sql` — changes the profile foreign key from Supabase Auth users to the custom `app_users` table and backfills matching profile rows. This is required because the app does not create Supabase Auth users.
+4. `web/database/migrations/2026-11-23-chat-unlock-pin.sql` — adds PIN columns/table for existing projects (safe to run even when already created by the base schema).
+5. `web/database/migrations/004_membership_rls_hardening.sql` — prevents browser self-joining and self-promoting in conversations and removes recursive membership visibility.
+6. `web/database/migrations/005_atomic_chat_pin_rate_limit.sql` — installs the atomic, account-wide 8-attempt / 15-minute PIN and security-answer limiter.
+7. `web/database/migrations/006_server_only_conversation_writes.sql` — makes conversation and message writes go through authenticated server APIs rather than direct browser table writes.
+8. `web/database/migrations/007_web_session_revocation.sql` — creates the service-only table used to revoke individual Web JWT sessions.
+9. `web/database/migrations/008_atomic_web_auth_rate_limit.sql` — enables atomic account-and-network throttling for Web login, registration and password recovery.
+10. `web/database/migrations/009_profile_and_receipt_rls_hardening.sql` — prevents profile enumeration and forged browser-side message receipts.
+
+For an existing project, inspect which schema/migrations have already been applied and run only missing steps in dependency order. In particular, `chat-auth-bridge.sql` must be applied before custom-account registration, and migrations `007`, `008` and `009` must be applied before deploying the updated Web APIs because authenticated requests and auth flows fail closed when their security tables/functions are unavailable.
+The migrations are committed source files; they are **not** applied to a hosted Supabase project automatically. After applying them, verify that the service-role API can perform expected writes and anon/authenticated browser roles cannot bypass the API.
+
+The separate `web/supabase/migrations/001_initial_schema.sql` describes the companion Supabase Auth/profile/conversation schema. Do not assume it is the backing schema for the custom `app_users` username/password API.
 
 ## Local development
 
-Use `npm install` then `npm run dev:vercel` (requires Vercel CLI login and local `DATABASE_URL` + `JWT_SECRET`) so the `/api` functions run alongside Vite. Plain `vite` does not execute Vercel Functions.
+Install dependencies and run the Vercel Functions alongside Vite:
 
-## Account login
+```bash
+npm install
+npm run typecheck
+npm run build
+npm run dev:vercel
+```
 
-Users register and sign in with only a username and password. Usernames are 3–24 lowercase letters, numbers, or underscores. Passwords must be at least 10 characters and at most 72 UTF-8 bytes. The server hashes passwords with bcrypt (12 rounds); raw passwords are never stored. Sessions are signed JWTs.
+The Vercel CLI is required for `npm run dev:vercel`. Configure the server-only Supabase variables and `JWT_SECRET` in local environment settings; never commit local secrets. Plain `vite` does not execute Vercel Functions.
 
-## Current migration status
+## Security and feature status
 
-The register/login/session endpoints are Vercel serverless functions using Neon PostgreSQL. The existing chat UI still contains Supabase database and Realtime calls; friends, conversations, messages, presence, groups, and media have not yet been migrated to the Vercel API/database. Do not remove the Supabase client dependency until those chat features have been migrated.
+- Passwords and personal chat PINs are stored as bcrypt hashes; the personal PIN is an authentication gate, not the conversation encryption key.
+- Browser bearer tokens are tab-scoped in `sessionStorage` and carry unique JWT IDs. Server-side logout revokes one token; logout-all increments the account token version. Tokens remain readable by same-origin JavaScript, so an HttpOnly-cookie/BFF plus CSRF design remains a release hardening task.
+- Web login, registration and password recovery use atomic account-and-network rate limiting. Failed auth attempts are tracked using salted hashes, not raw IP addresses or usernames.
+- Supabase profile reads are server-only, and browser clients cannot insert/update message receipts directly.
+- Browser device-key creation now exports private bytes only briefly in memory and re-imports the private key as non-extractable before IndexedDB persistence. The current web device-key primitives are not a complete device-verification or recovery protocol.
+- The custom AES-GCM/passphrase encryption remains an MVP prototype, not Signal/Matrix-grade E2EE.
+- Stories publishing, web encrypted attachments, and audio/video calling are not implemented. Those controls are explicitly disabled or marked unavailable rather than pretending to work.
+- Hosted RLS, two-account flows, and live Supabase behavior must still be tested after the migrations are applied.
 
-## Security note
-
-Client-side AES-GCM + ECDH. **Not** Signal Protocol. No independent audit. Configure `JWT_SECRET` only as a server-side environment variable, never as a `VITE_` variable.
+See `docs/SECURITY_AUDIT.md`, `docs/EXTERNAL_BLOCKERS.md`, `docs/IMPLEMENTATION-STATUS.md`, and `docs/RELEASE-GATE-2026-11-23.md` before any production release.

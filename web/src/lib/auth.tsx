@@ -13,6 +13,7 @@ interface AuthState {
   signUp: (username: string, password: string, securityAnswer: string) => Promise<{ error: string | null }>
   signIn: (username: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
+  signOutAll: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
 const AuthContext = createContext<AuthState | null>(null)
@@ -101,14 +102,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    const token = sessionStorage.getItem(TOKEN_KEY)
+    if (token) {
+      // Best-effort server revocation; local sign-out must still complete offline.
+      await fetch(`${API_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+      }).catch(() => undefined)
+    }
     sessionStorage.removeItem(TOKEN_KEY)
     sessionStorage.removeItem(USER_KEY)
     await clearLocalData().catch(() => undefined)
     setUser(null)
   }, [])
+  const signOutAll = useCallback(async () => {
+    const token = sessionStorage.getItem(TOKEN_KEY)
+    try {
+      if (token) {
+        const response = await fetch(`${API_URL}/api/auth/logout-all`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          keepalive: true,
+        })
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.error || 'Could not revoke all sessions.')
+        }
+      }
+    } finally {
+      sessionStorage.removeItem(TOKEN_KEY)
+      sessionStorage.removeItem(USER_KEY)
+      await clearLocalData().catch(() => undefined)
+      setUser(null)
+    }
+  }, [])
   const refreshProfile = useCallback(async () => {}, [])
   const profile = user ? { id: user.id, username: user.username, display_name: user.username } : null
-  const value = useMemo(() => ({ user, profile, loading, configured, signUp, signIn, signOut, refreshProfile }), [user, profile, loading, configured, signUp, signIn, signOut, refreshProfile])
+  const value = useMemo(() => ({ user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile }), [user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

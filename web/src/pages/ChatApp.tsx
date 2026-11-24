@@ -18,7 +18,7 @@ type VisibleMessage = Message & { plaintext?: string; locked?: boolean; decryptE
 type ConnectionRequest = { id: string; other_user_id: string; other_username: string; direction: 'incoming' | 'outgoing'; status: string }
 
 export default function ChatApp() {
-  const { user, profile, signOut } = useAuth()
+  const { user, profile, signOut, signOutAll } = useAuth()
   const [conversations, setConversations] = useState<ConvWithMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<VisibleMessage[]>([])
@@ -342,6 +342,11 @@ export default function ChatApp() {
             </div>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => void createGroup()} title="Create group" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-violet-600"><Users className="h-5 w-5"/></button>
+              <button type="button" onClick={() => {
+                if (window.confirm('Log out this account on every device? All active sessions will be revoked.')) {
+                  void signOutAll().catch(error => window.alert(error instanceof Error ? error.message : 'Could not revoke all sessions.'))
+                }
+              }} title="Log out all devices" aria-label="Log out all devices" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-amber-600"><ShieldCheck className="h-5 w-5"/></button>
               <button type="button" onClick={() => void signOut()} title="Sign out" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-rose-500"><LogOut className="h-5 w-5"/></button>
             </div>
           </div>
@@ -452,7 +457,7 @@ export default function ChatApp() {
                 <button type="button" onClick={leaveConversation} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Back"><ArrowLeft className="h-5 w-5"/></button>
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-lg font-black text-white">{displayName(activeConv).slice(0,1).toUpperCase()}</span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-extrabold text-slate-900">{displayName(activeConv)}</span><span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400"><span className={`h-1.5 w-1.5 rounded-full ${activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'bg-emerald-400':'bg-slate-300'}`}/>{isUnlocked?'Unlocked on this device':activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'Online':'Private conversation · locked'}</span></span>
-                <div className="flex items-center gap-1"><button type="button" title="Audio call (not available yet)" className="hidden rounded-xl p-2.5 text-slate-400 sm:block"><Circle className="h-4 w-4"/></button><button type="button" onClick={()=>isUnlocked?lockChat():setShowPasskeyDialog(true)} className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-extrabold transition ${isUnlocked?'bg-emerald-50 text-emerald-700':'bg-violet-50 text-violet-700 hover:bg-violet-100'}`}>{isUnlocked?<ShieldCheck className="h-4 w-4"/>:<Lock className="h-4 w-4"/>}{isUnlocked?'Unlocked':'Unlock chat'}</button><button type="button" title="More options" className="rounded-xl p-2.5 text-slate-400 hover:bg-slate-100"><MoreHorizontal className="h-5 w-5"/></button></div>
+                <div className="flex items-center gap-1"><button type="button" title="Audio calls are not available yet" aria-disabled="true" disabled className="hidden cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60 sm:block"><Circle className="h-4 w-4"/></button><button type="button" onClick={()=>isUnlocked?lockChat():setShowPasskeyDialog(true)} className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-extrabold transition ${isUnlocked?'bg-emerald-50 text-emerald-700':'bg-violet-50 text-violet-700 hover:bg-violet-100'}`}>{isUnlocked?<ShieldCheck className="h-4 w-4"/>:<Lock className="h-4 w-4"/>}{isUnlocked?'Unlocked':'Unlock chat'}</button><button type="button" title="More options are not available yet" aria-disabled="true" disabled className="cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60"><MoreHorizontal className="h-5 w-5"/></button></div>
               </header>
               {!isUnlocked ? (
                 <>
@@ -481,7 +486,7 @@ export default function ChatApp() {
                   </div>
                   <div className="shrink-0 border-t border-slate-100 bg-white/95 px-3 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:px-7 md:py-4">
                     <form className="mx-auto flex max-w-5xl items-center gap-2 rounded-[22px] border border-slate-200 bg-slate-50 p-2 focus-within:border-violet-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-50" onSubmit={e=>{e.preventDefault();void sendMessage()}}>
-                      <button type="button" className="rounded-xl p-2.5 text-slate-400" title="Attachments are not enabled on web yet"><ImageIcon className="h-5 w-5"/></button>
+                      <button type="button" aria-disabled="true" disabled className="cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60" title="Attachments are not enabled on web yet"><ImageIcon className="h-5 w-5"/></button>
                       <input className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm outline-none placeholder:text-slate-400" placeholder="Write a private message…" value={input} onChange={e=>setInput(e.target.value)} disabled={sending}/>
                       <button type="submit" disabled={sending||!input.trim()} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-200 transition hover:scale-[1.03] disabled:opacity-40"><Send className="h-4 w-4"/></button>
                     </form>

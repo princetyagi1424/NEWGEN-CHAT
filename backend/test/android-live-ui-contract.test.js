@@ -35,3 +35,13 @@ test('conversation lock clears chat passkey and decrypted transcript state', () 
   assert.match(ui, /chatKey = null/);
   assert.match(ui, /messages = emptyList\(\)/);
 });
+
+test('Android logout, account deletion, and invalid sessions clear local passkeys and decrypted media', () => {
+  assert.match(ui, /private fun clearLocalAccountState\(context: android\.content\.Context\)/);
+  assert.match(ui, /ChatPasskeyStore\.clear\(context\)/);
+  assert.match(ui, /PrivateMediaStore\(context\)\.clearAll\(\)/);
+  assert.match(ui, /if \(session == null\) withContext\(Dispatchers\.IO\) \{ SessionStore\.clear\(context\) \}/);
+  assert.doesNotMatch(ui, /if \(session == null\) withContext\(Dispatchers\.IO\) \{ clearLocalAccountState/);
+  assert.match(ui, /onLogout = \{\s*clearLocalAccountState\(context\)/);
+  assert.match(ui, /onAccountDeleted = \{\s*clearLocalAccountState\(context\)/);
+});

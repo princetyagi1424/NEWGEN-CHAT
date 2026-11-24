@@ -1,4 +1,4 @@
-# NEWGEN CHAT — Android messenger + Node.js API
+# NEWGEN CHAT — Android + Web clients + Node.js API
 
 NEWGEN CHAT is an Android-first username-based messaging project. This archive contains a connected **development MVP**, not a production-ready secure messenger. It deliberately does not claim Signal/Matrix-grade end-to-end encryption: the current client uses an AES-256-GCM + PBKDF2 shared-passphrase prototype while the production protocol work remains a release blocker.
 
@@ -80,18 +80,14 @@ Open the project root in Android Studio, sync Gradle, then use **Build → Build
 
 The push payload is intentionally generic: it does not include message text, sender identity, conversation IDs, ciphertext, or media URLs.
 
-## Automated checks run while preparing this archive
+## Automated checks and current release status
 
-- Node backend test suite: **50/50 passing**. These include static contract/security checks, not live HTTP integration tests.
-- Regression contract checks cover background lock/document-picker handling, direct text forwarding, direct/group expiry, block management and encrypted media access.
-- `node --check` for backend server/database/push files: pass.
-- Kotlin compile check with local lightweight Android/Firebase/JSON stubs for `ChatCipher`, `NewgenApi` and `MessageSharing`: pass. A parser-only check of the expanded Compose screen reported no Kotlin syntax diagnostics, but full Compose type-check/build is not possible without the Android/Compose classpath.
-- Earlier Keystore `SessionStore` stub check passed; the current session-store file was not changed in this pass.
-- CPU-heavy PBKDF2/AES operations run on `Dispatchers.Default`; mutable temporary passkeys are tracked and wiped on chat lock. Media/forwarding plaintext byte arrays are wiped after encryption.
-- SQLite schema/migration execution in Python SQLite: validated separately.
-- SQLite schema/migrations including group message expiry and group-media ACL columns were executed and validated with Python sqlite3.
-- ZIP integrity: verified after packaging with `unzip -t`.
+The current repository CI workflow validates the backend, Web client and Android debug APK. On the latest branch workflow snapshot (run 45238767834):
 
-`npm install` did not complete in the preparation environment (network/dependency retrieval timed out); Docker, Gradle, Android SDK, emulator and ADB were unavailable. Therefore the tests above do not establish that the full backend can be launched here or that the Android APK compiles and runs on a physical device.
+- Backend Node test suite: **67/67 passing**. These include source-contract/security tests and do not replace live HTTP integration.
+- Web: **TypeScript validation and Vite production build passed**.
+- Android: the debug APK build was still running when this status snapshot was written; check the workflow link before treating it as passed.
 
-See `docs/FINAL-VALIDATION.md`, `docs/IMPLEMENTATION-STATUS.md` and `docs/RELEASE-GATE-2026-11-23.md` for the current release assessment.
+See `docs/IMPLEMENTATION-STATUS.md`, `docs/SECURITY_AUDIT.md`, `docs/EXTERNAL_BLOCKERS.md` and `docs/RELEASE-GATE-2026-11-23.md` for the honest implementation/release assessment.
+
+A successful CI build is not proof of live Supabase migrations, Firebase delivery, two-device behavior, production E2EE, WebRTC calling, or an independent security review.

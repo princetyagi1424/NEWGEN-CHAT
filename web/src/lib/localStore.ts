@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import { exportPrivateKey, exportPublicKey, generateDeviceKeyPair, importPrivateKey } from '../crypto/keys'
+import { exportPublicKey, generateDeviceKeyPair } from '../crypto/keys'
 
 interface NewgenDB extends DBSchema {
   device: { key: string; value: { id: string; publicKeyB64: string; privateKey: CryptoKey; deviceName: string; createdAt: string } }
@@ -14,15 +14,18 @@ function getDb() {
   if (!dbPromise) {
     dbPromise = openDB<NewgenDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
+        // The typed DBSchema intentionally omits obsolete stores. Use the native
+        // IndexedDB type only for deleting those legacy names during migration.
+        const legacyDb = db as unknown as IDBDatabase
         // Version 1 stored exportable private-key bytes. Version 2 also introduced
         // plaintext conversation-key and decrypted-message stores. Drop all legacy
         // secret-bearing stores during upgrade; they are intentionally not migrated.
-        if (oldVersion < 2 && db.objectStoreNames.contains('device')) db.deleteObjectStore('device')
+        if (oldVersion < 2 && legacyDb.objectStoreNames.contains('device')) legacyDb.deleteObjectStore('device')
         if (oldVersion < 3) {
-          if (db.objectStoreNames.contains('conversationKeys')) db.deleteObjectStore('conversationKeys')
-          if (db.objectStoreNames.contains('messageCache')) db.deleteObjectStore('messageCache')
+          if (legacyDb.objectStoreNames.contains('conversationKeys')) legacyDb.deleteObjectStore('conversationKeys')
+          if (legacyDb.objectStoreNames.contains('messageCache')) legacyDb.deleteObjectStore('messageCache')
         }
-        if (!db.objectStoreNames.contains('device')) db.createObjectStore('device')
+        if (!legacyDb.objectStoreNames.contains('device')) db.createObjectStore('device')
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' })
       },
     })
@@ -38,10 +41,19 @@ export async function getOrCreateDeviceIdentity(deviceName?: string) {
   }
   const pair = await generateDeviceKeyPair()
   const publicKeyB64 = await exportPublicKey(pair.publicKey)
-  const privateKeyB64 = await exportPrivateKey(pair.privateKey)
-  // Re-import as non-extractable before persisting. IndexedDB stores the CryptoKey,
-  // not a plaintext PKCS#8 string that can be copied from browser storage.
-  const privateKey = await importPrivateKey(privateKeyB64)
+  // The key pair is briefly extractable because WebCrypto cannot generate an
+  // exportable public key and non-extractable private key in one call. Export the
+  // private bytes only in memory, immediately re-import them as non-extractable,
+  // and wipe the temporary byte buffer before persisting the CryptoKey.
+  const privateKeyBytes = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey))
+  let privateKey: CryptoKey
+  try {
+    privateKey = await crypto.subtle.importKey(
+      'pkcs8', privateKeyBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']
+    )
+  } finally {
+    privateKeyBytes.fill(0)
+  }
   const id = crypto.randomUUID()
   const name = deviceName || `${navigator.platform || 'Web'} · ${new Date().toLocaleDateString()}`
   await db.put('device', { id, publicKeyB64, privateKey, deviceName: name, createdAt: new Date().toISOString() }, 'current')

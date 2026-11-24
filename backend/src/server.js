@@ -35,7 +35,7 @@ const registerSchema = authSchema.extend({ securityQuestion: z.literal(SECURITY_
 const encryptedSchema = z.object({ ciphertext: z.string().min(1).max(100000), nonce: z.string().min(8).max(128), salt: z.string().min(8).max(128), algorithm: z.literal('AES-256-GCM-PBKDF2-SHA256').optional(), expiresInSeconds: z.number().int().min(10).max(30*24*60*60).optional() });
 
 function issueToken(user) {
-  return jwt.sign({ sub: user.id, username: user.username, ver: Number(user.token_version || 0) }, process.env.JWT_SECRET, { expiresIn: process.env.TOKEN_TTL || '7d', issuer: 'newgen-chat' });
+  return jwt.sign({ sub: user.id, username: user.username, ver: Number(user.token_version || 0), jti: randomUUID() }, process.env.JWT_SECRET, { expiresIn: process.env.TOKEN_TTL || '7d', issuer: 'newgen-chat' });
 }
 function requireAuth(req, res, next) {
   const header = req.get('authorization') || '';
@@ -46,7 +46,13 @@ function requireAuth(req, res, next) {
     if (!current || Number(payload.ver || 0) !== Number(current.token_version || 0)) {
       return res.status(401).json({ error: 'Session expired; please log in again' });
     }
+    if (payload.jti && db.prepare('SELECT 1 FROM revoked_tokens WHERE jti=? AND expires_at>?').get(payload.jti, Date.now())) {
+      return res.status(401).json({ error: 'Session revoked; please log in again' });
+    }
     req.user = { id: current.id, username: current.username };
+    // A legacy token without jti is still accepted until expiry. Logging out with
+    // such a token falls back to token_version revocation for all devices.
+    req.authSession = { jti: typeof payload.jti === 'string' ? payload.jti : null, expiresAt: Number(payload.exp || 0) * 1000 };
     next();
   } catch { res.status(401).json({ error: 'Authentication required' }); }
 }
@@ -83,6 +89,33 @@ app.post('/api/auth/login', authLimiter, async (req,res) => {
   res.json({ user:{ id:user.id, username:user.username }, token:issueToken(user) });
 });
 app.get('/api/me', requireAuth, (req,res) => res.json({ user:req.user }));
+
+// Revoke only the current JWT on normal logout. Legacy pre-jti tokens cannot be
+// revoked individually, so their logout safely falls back to revoking all sessions.
+app.post('/api/auth/logout', requireAuth, (req,res) => {
+  const now = Date.now();
+  const session = req.authSession;
+  if (session?.jti && session.expiresAt > now) {
+    db.prepare('INSERT OR IGNORE INTO revoked_tokens(jti,user_id,expires_at,revoked_at) VALUES(?,?,?,?)')
+      .run(session.jti, req.user.id, session.expiresAt, now);
+  } else {
+    db.prepare('UPDATE users SET token_version=token_version+1 WHERE id=?').run(req.user.id);
+  }
+  db.prepare('DELETE FROM revoked_tokens WHERE expires_at<=?').run(now);
+  res.status(204).end();
+});
+
+// Revoke every active token for the account, including tokens on other devices.
+app.post('/api/auth/logout-all', requireAuth, (req,res) => {
+  const now = Date.now();
+  db.prepare('UPDATE users SET token_version=token_version+1 WHERE id=?').run(req.user.id);
+  // Revoke every registered push route as well: devices must sign in again
+  // before they can receive notifications for this account.
+  db.prepare('DELETE FROM push_devices WHERE user_id=?').run(req.user.id);
+  db.prepare('UPDATE user_presence SET last_seen_at=?,is_online=0 WHERE user_id=?').run(now, req.user.id);
+  db.prepare('DELETE FROM revoked_tokens WHERE user_id=? OR expires_at<=?').run(req.user.id, now);
+  res.status(204).end();
+});
 
 // Device push registration. FCM tokens are sensitive routing identifiers and are
 // never returned to clients or included in logs. Payloads intentionally contain no
@@ -292,12 +325,36 @@ app.post('/api/groups/:groupId/members', requireAuth, (req,res) => {
   catch{return res.status(409).json({error:'User is already a member or group does not exist'});}
   res.status(201).json({status:'added'});
 });
+// Ownership is authoritative in groups_chat.owner_id; the admin role alone
+// must never allow an admin to remove or impersonate the owner.
+app.post('/api/groups/:groupId/transfer-ownership', requireAuth, (req,res) => {
+  const data=validate(z.object({userId:z.string().uuid()}),req,res);if(!data)return;
+  const group=db.prepare('SELECT owner_id FROM groups_chat WHERE id=?').get(req.params.groupId);
+  if(!group)return res.status(404).json({error:'Group not found'});
+  if(group.owner_id!==req.user.id)return res.status(403).json({error:'Only the group owner can transfer ownership'});
+  if(data.userId===req.user.id)return res.status(400).json({error:'The current owner already owns this group'});
+  const target=db.prepare('SELECT 1 FROM group_members WHERE group_id=? AND user_id=?').get(req.params.groupId,data.userId);
+  if(!target)return res.status(404).json({error:'New owner must already be a group member'});
+  const transfer=db.transaction(()=>{
+    db.prepare('UPDATE groups_chat SET owner_id=? WHERE id=? AND owner_id=?').run(data.userId,req.params.groupId,req.user.id);
+    // The prior owner becomes a regular member. The new owner is promoted to admin;
+    // any other existing admins retain their role.
+    db.prepare("UPDATE group_members SET role='member' WHERE group_id=? AND user_id=?").run(req.params.groupId,req.user.id);
+    db.prepare("UPDATE group_members SET role='admin' WHERE group_id=? AND user_id=?").run(req.params.groupId,data.userId);
+  });
+  transfer();
+  res.json({status:'ownership_transferred',ownerId:data.userId});
+});
 app.delete('/api/groups/:groupId/members/:userId', requireAuth, (req,res) => {
   const actor=db.prepare('SELECT role FROM group_members WHERE group_id=? AND user_id=?').get(req.params.groupId,req.user.id);
   if(!actor)return res.status(403).json({error:'Not a group member'});
-  if(req.params.userId!==req.user.id && actor.role!=='admin')return res.status(403).json({error:'Group admin permission required'});
+  const group=db.prepare('SELECT owner_id FROM groups_chat WHERE id=?').get(req.params.groupId);
+  if(!group)return res.status(404).json({error:'Group not found'});
+  if(req.params.userId===group.owner_id)return res.status(409).json({error:'Transfer group ownership before removing the owner'});
+  if(req.params.userId!==req.user.id && group.owner_id!==req.user.id && actor.role!=='admin')return res.status(403).json({error:'Group admin permission required'});
   const target=db.prepare('SELECT role FROM group_members WHERE group_id=? AND user_id=?').get(req.params.groupId,req.params.userId);
   if(!target)return res.status(404).json({error:'Member not found'});
+  if(target.role==='admin' && group.owner_id!==req.user.id && req.params.userId!==req.user.id)return res.status(403).json({error:'Only the group owner can remove another admin'});
   if(target.role==='admin'){
     const other=db.prepare("SELECT user_id FROM group_members WHERE group_id=? AND role='admin' AND user_id<>? LIMIT 1").get(req.params.groupId,req.params.userId);
     if(!other)return res.status(409).json({error:'A group must retain at least one admin'});
@@ -416,9 +473,17 @@ app.post('/api/account/recover-password', authLimiter, async (req,res) => {
   }
   if (!verified) return res.status(400).json({error:'Invalid recovery details'});
   const passwordHash = await bcrypt.hash(data.newPassword,12);
-  // Revoke every existing access token when account credentials are recovered.
-  db.prepare('UPDATE users SET password_hash=?, token_version=token_version+1 WHERE id=?').run(passwordHash,user.id);
-  db.prepare('DELETE FROM account_recovery WHERE user_id=?').run(user.id);
+  // Revoke all old sessions and notification routes together. A recovered account
+  // must sign in again before any device can receive new push notifications.
+  const now = Date.now();
+  const recover = db.transaction(() => {
+    db.prepare('UPDATE users SET password_hash=?, token_version=token_version+1 WHERE id=?').run(passwordHash,user.id);
+    db.prepare('DELETE FROM account_recovery WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM push_devices WHERE user_id=?').run(user.id);
+    db.prepare('UPDATE user_presence SET last_seen_at=?, is_online=0 WHERE user_id=?').run(now,user.id);
+    db.prepare('DELETE FROM revoked_tokens WHERE user_id=? OR expires_at<=?').run(user.id,now);
+  });
+  recover();
   res.json({status:'password_reset',message:'Create a new recovery code after login.'});
 });
 
@@ -671,7 +736,7 @@ app.get('/api/keys/conversations/:conversationId/envelopes', requireAuth, (req, 
 app.use((err,_req,res,_next)=>{
   if (err?.type === 'entity.parse.failed') return res.status(400).json({ error:'Malformed JSON request body' });
   if (err?.type === 'entity.too.large') return res.status(413).json({ error:'Request body is too large' });
-  console.error('Request failed:',err.message);
+  console.error('Request failed:', err?.code || err?.name || 'internal_error');
   res.status(500).json({error:'Internal server error'});
 });
 const port=Number(process.env.PORT||5000),host=process.env.HOST||'127.0.0.1';

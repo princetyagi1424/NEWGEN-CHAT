@@ -86,6 +86,14 @@ object NewgenApi {
         }
 
 
+    suspend fun logout(accessToken: String) = withContext(Dispatchers.IO) {
+        request("/api/auth/logout", "POST", JSONObject(), accessToken)
+    }
+
+    suspend fun logoutAllSessions(accessToken: String) = withContext(Dispatchers.IO) {
+        request("/api/auth/logout-all", "POST", JSONObject(), accessToken)
+    }
+
     suspend fun setChatPin(accessToken: String, pin: String, securityAnswer: String) = withContext(Dispatchers.IO) {
         request("/api/auth/chat-pin", "POST", JSONObject()
             .put("action", "set").put("pin", pin).put("securityAnswer", securityAnswer), accessToken)

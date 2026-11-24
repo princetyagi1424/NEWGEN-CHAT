@@ -1,4 +1,4 @@
-import { getDb, validateCredentials, sendError, bcrypt, issueToken } from '../_lib/auth.js'
+import { getDb, validateCredentials, sendError, bcrypt, issueToken, consumeAuthAttempt } from '../_lib/auth.js'
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -18,11 +18,17 @@ export default async function handler(req, res) {
       throw error
     }
     if (!user || !(await bcrypt.compare(input.password, user.password_hash))) {
+      const allowed = await consumeAuthAttempt(db, req, input.username, 10)
+      if (!allowed) return sendError(res, 429, 'Too many sign-in attempts. Try again in 15 minutes.')
       return sendError(res, 401, 'Invalid username or password')
     }
     return res.status(200).json({ user: { id: user.id, username: user.username }, token: issueToken(user) })
   } catch (error) {
-    console.error('Login API error:', error.message)
+    const code = error?.code || error?.cause?.code
+    if (code === '42883' || code === 'PGRST202' || code === '42P01' || code === 'PGRST205') {
+      return sendError(res, 503, 'Authentication rate-limit database setup is incomplete. Apply migration 008_atomic_web_auth_rate_limit.sql.')
+    }
+    console.error('Login API error:', error?.code || error?.name || 'login_failed')
     return sendError(res, 500, 'Login is temporarily unavailable')
   }
 }

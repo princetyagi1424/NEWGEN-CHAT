@@ -120,6 +120,12 @@ private data class RenderedMessage(
     val attachment: AttachmentMeta? = null
 )
 
+private fun clearLocalAccountState(context: android.content.Context) {
+    SessionStore.clear(context)
+    runCatching { ChatPasskeyStore.clear(context) }
+    runCatching { PrivateMediaStore(context).clearAll() }
+}
+
 @Composable
 private fun NewgenApp() {
     val context = LocalContext.current
@@ -170,12 +176,12 @@ private fun NewgenApp() {
                 onRefresh = { refreshKey++ },
                 onOpenChat = { activeChat = it },
                 onLogout = {
-                    SessionStore.clear(context)
+                    clearLocalAccountState(context)
                     activeChat = null
                     session = null
                 },
                 onAccountDeleted = {
-                    SessionStore.clear(context)
+                    clearLocalAccountState(context)
                     activeChat = null
                     session = null
                 }
@@ -306,6 +312,7 @@ private fun MainHome(
         scope.launch {
             runCatching { NewgenApi.unregisterCurrentPushToken(session.accessToken) }
             runCatching { NewgenApi.setOffline(session.accessToken) }
+            runCatching { NewgenApi.logout(session.accessToken) }
             onLogout()
         }
     }
@@ -717,6 +724,7 @@ private fun SettingsPane(
     var notice by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmLogoutAll by remember { mutableStateOf(false) }
     var blockedUsers by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
     var passkey by remember { mutableStateOf("") }
     var confirmPasskey by remember { mutableStateOf("") }
@@ -844,7 +852,33 @@ private fun SettingsPane(
         Spacer(Modifier.height(20.dp))
         OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Log out") }
         Spacer(Modifier.height(8.dp))
+        OutlinedButton(onClick = { confirmLogoutAll = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Log out all devices") }
+        Spacer(Modifier.height(8.dp))
         Button(onClick = { confirmDelete = true }, colors = ButtonDefaults.buttonColors(containerColor = Danger), modifier = Modifier.fillMaxWidth()) { Text("Delete account permanently") }
+    }
+    if (confirmLogoutAll) {
+        AlertDialog(
+            onDismissRequest = { confirmLogoutAll = false },
+            title = { Text("Log out all devices?") },
+            text = { Text("This revokes every active session for your account, including this device. You will need to sign in again.") },
+            confirmButton = {
+                TextButton(enabled = !busy, onClick = {
+                    confirmLogoutAll = false
+                    busy = true
+                    scope.launch {
+                        // Remove this device's push token and presence before the
+                        // server revokes the account token version.
+                        runCatching { NewgenApi.unregisterCurrentPushToken(session.accessToken) }
+                        runCatching { NewgenApi.setOffline(session.accessToken) }
+                        runCatching { NewgenApi.logoutAllSessions(session.accessToken) }
+                            .onSuccess { onLogout() }
+                            .onFailure { notice = it.message ?: "Could not revoke all sessions" }
+                        busy = false
+                    }
+                }) { Text("Log out all", color = Danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmLogoutAll = false }) { Text("Cancel") } }
+        )
     }
     if (confirmDelete) {
         AlertDialog(
