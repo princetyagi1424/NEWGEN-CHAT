@@ -1,11 +1,11 @@
-import { getDb, readBearer, sendError } from '../_lib/auth.js'
+import { getDb, readBearer, sendError, isTokenRevoked } from '../_lib/auth.js'
 
 async function getUser(req, db) {
   const token = readBearer(req)
   if (!token?.sub) return null
   const { data, error } = await db.from('app_users').select('id,username,token_version').eq('id', token.sub).maybeSingle()
   if (error) throw error
-  if (!data || Number(data.token_version) !== Number(token.ver || 0)) return null
+  if (!data || Number(data.token_version) !== Number(token.ver || 0) || await isTokenRevoked(db, token)) return null
   return data
 }
 
