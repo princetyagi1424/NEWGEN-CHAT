@@ -60,13 +60,11 @@ test('conversation and message writes cannot bypass the authenticated server API
   assert.match(schema, /messages_select[\s\S]*?messages\.conversation_id/);
 });
 
-test('unimplemented web chat actions are visibly disabled rather than dead clickable buttons', () => {
+test('unimplemented web chat actions are not shown as active controls', () => {
   const chat = fs.readFileSync(path.join(repo, 'web/src/pages/ChatApp.tsx'), 'utf8');
-  assert.match(chat, /Audio calls are not available yet[^>]*aria-disabled="true" disabled/);
-  assert.match(chat, /More options are not available yet[^>]*aria-disabled="true" disabled/);
-  assert.match(chat, /Attachments are not enabled on web yet/);
-  const attachmentButton = chat.match(/<button[^>]*Attachments are not enabled on web yet[^>]*>/)?.[0] || '';
-  assert.match(attachmentButton, /aria-disabled="true" disabled/);
+  assert.doesNotMatch(chat, /Audio calls are not available yet/);
+  assert.doesNotMatch(chat, /More options are not available yet/);
+  assert.doesNotMatch(chat, /Attachments are not enabled on web yet/);
 });
 
 test('existing Supabase projects receive server-only conversation and message write permissions', () => {
