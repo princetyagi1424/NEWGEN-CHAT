@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash } from 'node:crypto'
 
 export function getDb() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -51,4 +51,31 @@ export async function isTokenRevoked(db, token) {
     .maybeSingle()
   if (error) throw error
   return Boolean(data)
+}
+
+/** Hash both network and account identifiers with the server-only JWT secret.
+ * The rate-limit table never stores raw IP addresses or usernames. */
+export function hashAuthAttemptIdentity(req, accountIdentifier) {
+  const secret = getJwtSecret()
+  const forwarded = req.headers['x-forwarded-for']
+  const ip = String(forwarded || req.socket?.remoteAddress || 'unknown')
+    .split(',')[0].trim().slice(0, 128)
+  const account = String(accountIdentifier || '').trim().toLowerCase()
+  if (!account || account.length > 128) throw new Error('Invalid account rate-limit identifier')
+  return {
+    ipHash: createHash('sha256').update(secret).update(':ip:').update(ip).digest('hex'),
+    accountHash: createHash('sha256').update(secret).update(':account:').update(account).digest('hex')
+  }
+}
+
+export async function consumeAuthAttempt(db, req, accountIdentifier, limit = 10) {
+  const { ipHash, accountHash } = hashAuthAttemptIdentity(req, accountIdentifier)
+  const { data, error } = await db.rpc('consume_account_auth_attempt', {
+    p_ip_hash: ipHash,
+    p_account_hash: accountHash,
+    p_limit: limit,
+    p_window_seconds: 900
+  })
+  if (error) throw error
+  return data === true
 }
