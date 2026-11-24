@@ -93,7 +93,7 @@ test('Web-issued JWTs have server-side revocation and authenticated routes enfor
   assert.match(helper, /jti: randomUUID\(\)/);
   assert.match(helper, /export async function isTokenRevoked/);
   assert.match(helper, /\.eq\('jti', token\.jti\)/);
-  assert.match(logout, /app/); // endpoint is a Vercel function module, not an Express app
+  assert.match(logout, /export default async function handler/);
   assert.match(logout, /revoked_tokens/);
   assert.match(logout, /expires_at/);
   assert.match(logoutAll, /token_version/);
