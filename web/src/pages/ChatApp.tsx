@@ -18,7 +18,7 @@ type VisibleMessage = Message & { plaintext?: string; locked?: boolean; decryptE
 type ConnectionRequest = { id: string; other_user_id: string; other_username: string; direction: 'incoming' | 'outgoing'; status: string }
 
 export default function ChatApp() {
-  const { user, profile, signOut } = useAuth()
+  const { user, profile, signOut, signOutAll } = useAuth()
   const [conversations, setConversations] = useState<ConvWithMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<VisibleMessage[]>([])
@@ -342,6 +342,11 @@ export default function ChatApp() {
             </div>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => void createGroup()} title="Create group" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-violet-600"><Users className="h-5 w-5"/></button>
+              <button type="button" onClick={() => {
+                if (window.confirm('Log out this account on every device? All active sessions will be revoked.')) {
+                  void signOutAll().catch(error => window.alert(error instanceof Error ? error.message : 'Could not revoke all sessions.'))
+                }
+              }} title="Log out all devices" aria-label="Log out all devices" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-amber-600"><ShieldCheck className="h-5 w-5"/></button>
               <button type="button" onClick={() => void signOut()} title="Sign out" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-rose-500"><LogOut className="h-5 w-5"/></button>
             </div>
           </div>

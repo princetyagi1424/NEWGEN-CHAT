@@ -145,3 +145,14 @@ test('Supabase profile data is server-only and browser clients cannot forge mess
   assert.match(migration, /DROP POLICY IF EXISTS "receipts_own"/i);
   assert.match(migration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.message_receipts FROM anon, authenticated/i);
 });
+
+test('Web exposes an explicit confirmed all-device sign-out action', () => {
+  const auth = fs.readFileSync(path.join(repo, 'web/src/lib/auth.tsx'), 'utf8');
+  const chat = fs.readFileSync(path.join(repo, 'web/src/pages/ChatApp.tsx'), 'utf8');
+  assert.match(auth, /signOutAll: \(\) => Promise<void>/);
+  assert.match(auth, /\/api\/auth\/logout-all/);
+  assert.match(auth, /await clearLocalData\(\)/);
+  assert.match(chat, /Log out all devices/);
+  assert.match(chat, /window\.confirm\('Log out this account on every device\?/);
+  assert.match(chat, /signOutAll\(\)/);
+});
