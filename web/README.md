@@ -38,8 +38,9 @@ For a new project, run these SQL files in the Supabase SQL Editor in this order:
 7. `web/database/migrations/006_server_only_conversation_writes.sql` — makes conversation and message writes go through authenticated server APIs rather than direct browser table writes.
 8. `web/database/migrations/007_web_session_revocation.sql` — creates the service-only table used to revoke individual Web JWT sessions.
 9. `web/database/migrations/008_atomic_web_auth_rate_limit.sql` — enables atomic account-and-network throttling for Web login, registration and password recovery.
+10. `web/database/migrations/009_profile_and_receipt_rls_hardening.sql` — prevents profile enumeration and forged browser-side message receipts.
 
-For an existing project, inspect which schema/migrations have already been applied and run only missing steps in dependency order. In particular, `chat-auth-bridge.sql` must be applied before custom-account registration, and migrations `007` and `008` must be applied before deploying the updated Web APIs because authenticated requests and auth flows fail closed when their security tables/functions are unavailable.
+For an existing project, inspect which schema/migrations have already been applied and run only missing steps in dependency order. In particular, `chat-auth-bridge.sql` must be applied before custom-account registration, and migrations `007`, `008` and `009` must be applied before deploying the updated Web APIs because authenticated requests and auth flows fail closed when their security tables/functions are unavailable.
 5. `web/database/migrations/007_web_session_revocation.sql` — adds per-JWT session revocation storage; required before the updated Web APIs will accept authenticated requests.
 
 The migrations are committed source files; they are **not** applied to a hosted Supabase project automatically. After applying them, verify that the service-role API can perform expected writes and anon/authenticated browser roles cannot bypass the API.
@@ -62,7 +63,9 @@ The Vercel CLI is required for `npm run dev:vercel`. Configure the server-only S
 ## Security and feature status
 
 - Passwords and personal chat PINs are stored as bcrypt hashes; the personal PIN is an authentication gate, not the conversation encryption key.
-- Browser bearer tokens are currently tab-scoped in `sessionStorage`. This reduces persistence but is still readable by same-origin JavaScript; it is not an XSS boundary. A production HttpOnly-cookie/BFF plus CSRF design remains a release hardening task.
+- Browser bearer tokens are tab-scoped in `sessionStorage` and carry unique JWT IDs. Server-side logout revokes one token; logout-all increments the account token version. Tokens remain readable by same-origin JavaScript, so an HttpOnly-cookie/BFF plus CSRF design remains a release hardening task.
+- Web login, registration and password recovery use atomic account-and-network rate limiting. Failed auth attempts are tracked using salted hashes, not raw IP addresses or usernames.
+- Supabase profile reads are server-only, and browser clients cannot insert/update message receipts directly.
 - Browser device-key creation now exports private bytes only briefly in memory and re-imports the private key as non-extractable before IndexedDB persistence. The current web device-key primitives are not a complete device-verification or recovery protocol.
 - The custom AES-GCM/passphrase encryption remains an MVP prototype, not Signal/Matrix-grade E2EE.
 - Stories publishing, web encrypted attachments, and audio/video calling are not implemented. Those controls are explicitly disabled or marked unavailable rather than pretending to work.
