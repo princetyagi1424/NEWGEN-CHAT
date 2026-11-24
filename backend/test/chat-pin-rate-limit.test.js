@@ -38,3 +38,10 @@ test('a correct PIN resets the account-wide attempt window', () => {
   const verify = handler.slice(handler.indexOf("if (action === 'verify')"));
   assert.ok(verify.indexOf('await resetAttempts(db, user.id)') < verify.indexOf("status: 'verified'"));
 });
+
+test('PIN UI sends the current account password fallback accepted by the API', () => {
+  const ui = fs.readFileSync(path.join(repo, 'web/src/pages/ChatApp.tsx'), 'utf8');
+  assert.match(ui, /currentPassword: setupCurrentPassword/);
+  assert.match(handler, /req\.body\?\.currentPassword/);
+  assert.match(handler, /bcrypt\.compare\(currentPassword, user\.password_hash\)/);
+});
