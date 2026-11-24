@@ -82,12 +82,12 @@ The push payload is intentionally generic: it does not include message text, sen
 
 ## Automated checks and current release status
 
-The current repository CI workflow validates the backend, Web client and Android debug APK. On the latest branch workflow snapshot (run 45238767834):
+The current repository CI workflow validates the backend, Web client and Android debug APK. On the latest verified workflow snapshot (run 45352686459):
 
-- Backend Node test suite: **67/67 passing**. These include source-contract/security tests and do not replace live HTTP integration.
+- Backend Node test suite: **81/81 passing**. These include source-contract/security tests and do not replace full signed-in live UI integration.
 - Web: **TypeScript validation and Vite production build passed**.
-- Android: the debug APK build was still running when this status snapshot was written; check the workflow link before treating it as passed.
+- Android: debug APK build and artifact upload passed.
 
-Before using Web profile photo upload or stories, apply `web/database/migrations/010_profile_stories.sql` in Supabase after the custom account schema and chat-auth bridge. See `docs/IMPLEMENTATION-STATUS.md`, `docs/SECURITY_AUDIT.md`, `docs/EXTERNAL_BLOCKERS.md` and `docs/RELEASE-GATE-2026-11-23.md` for the honest implementation/release assessment.
+Before using Web profile photo upload or stories on a new Supabase project, apply the custom account schema and chat-auth bridge, then `web/database/migrations/010_profile_stories.sql` and `web/database/migrations/011_server_only_data_access.sql`. The stories API is consolidated into `/api/me?resource=stories` so the Web deployment fits Vercel Hobby's 12-function limit. See `docs/IMPLEMENTATION-STATUS.md`, `docs/SECURITY_AUDIT.md`, `docs/EXTERNAL_BLOCKERS.md` and `docs/RELEASE-GATE-2026-11-23.md` for the honest implementation/release assessment.
 
-A successful CI build is not proof of live Supabase migrations, Firebase delivery, two-device behavior, production E2EE, WebRTC calling, or an independent security review.
+The current production deployment is live at https://newgen-chat-eagle-9922.vercel.app. The Supabase profile/story media buckets are private, and browser access to sensitive data tables is revoked; Vercel server APIs use the service-role key. A successful CI build is not proof of signed-in two-user story/profile journeys, Firebase delivery, two-device behavior, production E2EE, WebRTC calling, or an independent security review.

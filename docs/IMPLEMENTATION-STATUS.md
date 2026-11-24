@@ -3,7 +3,7 @@
 Updated: 2026-11-24  
 Branch: `main`  
 Merged PR: [#3](https://github.com/princetyagi1424/NEWGEN-CHAT/pull/3)  
-Main commit: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
+Main commit: `08b66bab3cdc6d26fa4cdd154eb04865d4107039`
 
 ## Connected source features
 
@@ -44,8 +44,9 @@ Main commit: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
 ## Security fixes in the current work branch
 
 - Fixed WebCrypto device-key creation: the previous implementation generated a non-extractable ECDH pair and then tried to export its private key, causing first-time device setup to fail. The private key is now transiently exported in memory, re-imported as non-extractable, and the temporary byte buffer is zeroed.
-- Removed Supabase RLS policies that allowed authenticated clients to self-insert conversation membership or update their own role. Browser membership reads are restricted to the caller's own row to avoid recursive RLS evaluation.
-- Removed direct browser INSERT/UPDATE/DELETE access for conversations, membership rows and messages; mutations use authenticated server APIs.
+- Removed legacy direct-browser Supabase policies and revoked all anon/authenticated table privileges for devices, conversations, memberships, messages, receipts and push subscriptions. The browser chat client uses authenticated Vercel APIs and Realtime Presence only; service-role access remains server-side.
+- Added covering indexes for the previously unindexed foreign keys used by membership, conversation, message, request and story-view queries.
+- Profile and story tables remain RLS-enabled with direct browser access revoked; uploads and signed media reads run through authenticated Vercel APIs.
 - Fixed the Chat PIN handler's malformed success path that had placed the verification response inside a line comment.
 - Replaced the PIN check-then-insert race with a transaction-scoped PostgreSQL advisory lock and account-wide quota. Eight attempts are allowed per account in a 15-minute window, across IPs/devices; successful verification clears that account's attempt window.
 - Added server-side JWT session revocation: normal logout revokes the current jti, logout-all increments the token version, and both remove push registrations / mark offline as appropriate. Password recovery now also clears all registered push routes and presence atomically while revoking all sessions.
@@ -57,17 +58,17 @@ Main commit: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
 
 ## Latest verified main CI snapshot
 
-Workflow: [GitHub Actions run 45328833092](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45328833092)  
-Validated main commit: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
+Workflow: [GitHub Actions run 45352686459](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45352686459)  
+Validated main commit: `08b66bab3cdc6d26fa4cdd154eb04865d4107039`
 
-- Backend: **77 tests passed, 0 failed**.
+- Backend: **81 tests passed, 0 failed**.
 - Backend dependency audit: passed.
 - Web dependency audit: passed, **0 vulnerabilities reported**.
 - Web TypeScript validation: passed.
 - Web production build: passed.
 - Android: `:app:assembleDebug` passed; debug APK artifact upload passed.
 
-These are source/CI validations only. They do not prove hosted Supabase migrations, Firebase delivery, physical two-device exchanges, calls or production-grade E2EE.
+The Web production deployment for this commit is [READY](https://newgen-chat-eagle-9922.vercel.app). The hosted Supabase project has migrations `010_profile_stories_private_media_and_rls` and `011_server_only_data_access_and_fk_indexes` applied; both media buckets are private. Live page and auth-route availability were checked, but a signed-in profile/story end-to-end user journey and physical two-device exchange were not run. CI and deployment do not prove Firebase delivery, calls or production-grade E2EE.
 
 ## Not complete / not production verified
 
