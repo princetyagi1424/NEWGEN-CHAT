@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     }
     return sendError(res, 405, 'Method not allowed')
   } catch (error) {
-    console.error('Messages API error:', error.message)
+    console.error('Messages API error:', error?.code || error?.name || 'message_request_failed')
     return sendError(res, 500, 'Could not process message')
   }
 }
