@@ -31,7 +31,9 @@ Working branch: `fix/web-device-key-persistence`
 - React/TypeScript/Vite app with username/password auth, friend requests, conversation list, direct/group conversation APIs, message timeline and local passphrase gate.
 - PIN setup/change and in-chat PIN verification endpoint with bcrypt hashes.
 - Browser device identity persistence with non-extractable private key storage in IndexedDB.
-- Web access tokens are tab-scoped in sessionStorage (still readable by same-origin JavaScript). New Web JWTs carry `jti`; authenticated Vercel APIs check server-side revocation, with `/api/auth/logout` and `/api/auth/logout-all` endpoints. Apply migration `007_web_session_revocation.sql` before deploying these APIs.
+- Web access tokens are tab-scoped in `sessionStorage` (still readable by same-origin JavaScript); each JWT has a `jti`, Vercel APIs reject revoked tokens, and `/api/auth/logout` plus `/api/auth/logout-all` support server-side revocation.
+- Web login, registration and password recovery use atomic account-and-network attempt limiting through migration `008_atomic_web_auth_rate_limit.sql`.
+- Supabase profile enumeration and browser receipt writes are blocked by migration `009_profile_and_receipt_rls_hardening.sql`. New Web JWTs carry `jti`; authenticated Vercel APIs check server-side revocation, with `/api/auth/logout` and `/api/auth/logout-all` endpoints. Apply migration `007_web_session_revocation.sql` before deploying these APIs.
 - Unimplemented call, attachments and More options controls are disabled. Stories are clearly marked unavailable; publishing is not wired up.
 
 ## Security fixes in the current work branch
@@ -70,6 +72,6 @@ The earlier CI run for commit `1e92ead0285db6068581edcd44276fb0d19a8062` complet
 
 ## Required hosted setup
 
-Before validating the hosted Web PIN/security changes, apply the relevant Supabase migrations in order: the base schema/PIN migration if not already present, then `004_membership_rls_hardening.sql`, `005_atomic_chat_pin_rate_limit.sql`, and `006_server_only_conversation_writes.sql`. A committed migration is not proof that the hosted database has been changed.
+Before validating the hosted Web PIN/security changes, apply the relevant Supabase migrations in order: the base schema/PIN migration if not already present, then `004_membership_rls_hardening.sql`, `005_atomic_chat_pin_rate_limit.sql`, `006_server_only_conversation_writes.sql`, `007_web_session_revocation.sql`, `008_atomic_web_auth_rate_limit.sql`, and `009_profile_and_receipt_rls_hardening.sql`. A committed migration is not proof that the hosted database has been changed.
 
 Do not advertise this codebase as a production-ready secure messenger until the E2EE protocol, hosted migrations, two-device tests, live infrastructure and independent review are complete.
