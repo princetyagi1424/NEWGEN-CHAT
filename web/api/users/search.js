@@ -24,7 +24,20 @@ export default async function handler(req, res) {
       .order('username', { ascending: true })
       .limit(20)
     if (error) throw error
-    return res.status(200).json({ users: users || [] })
+    const userIds = (users || []).map(item => item.id)
+    let friendIds = new Set()
+    if (userIds.length) {
+      const { data: friendships, error: friendshipError } = await db.from('friendships')
+        .select('user_low,user_high')
+        .or(`user_low.eq.${token.sub},user_high.eq.${token.sub}`)
+      if (friendshipError) throw friendshipError
+      friendIds = new Set((friendships || []).map(item =>
+        item.user_low === token.sub ? item.user_high : item.user_low
+      ))
+    }
+    return res.status(200).json({
+      users: (users || []).map(item => ({ ...item, is_friend: friendIds.has(item.id) })),
+    })
   } catch (error) {
     console.error('User search API error:', error?.code || error?.name || 'user_search_failed')
     return sendError(res, 500, 'User search is temporarily unavailable')
