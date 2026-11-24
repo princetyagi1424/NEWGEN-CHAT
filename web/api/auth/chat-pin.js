@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { getDb, readBearer, sendError, bcrypt } from '../_lib/auth.js'
+import { getDb, readBearer, sendError, bcrypt, isTokenRevoked } from '../_lib/auth.js'
 
 const normalizeAnswer = value => typeof value === 'string' ? value.normalize('NFKC').trim().toLowerCase() : ''
 const validPin = value => typeof value === 'string' && /^[0-9]{4,12}$/.test(value)
@@ -11,7 +11,7 @@ async function authenticate(req, db) {
     .select('id,username,token_version,security_question,security_answer_hash,chat_unlock_pin_hash')
     .eq('id', token.sub).maybeSingle()
   if (error) throw error
-  if (!data || Number(data.token_version) !== Number(token.ver || 0)) return null
+  if (!data || Number(data.token_version) !== Number(token.ver || 0) || await isTokenRevoked(db, token)) return null
   return data
 }
 
