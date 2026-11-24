@@ -1,6 +1,6 @@
 # NEWGEN CHAT — Implementation status
 
-Updated: 2026-11-23  
+Updated: 2026-11-24  
 Working branch: `fix/web-device-key-persistence`
 
 ## Connected source features
@@ -34,6 +34,7 @@ Working branch: `fix/web-device-key-persistence`
 - Web access tokens are tab-scoped in `sessionStorage` (still readable by same-origin JavaScript); each JWT has a `jti`, protected Vercel APIs reject revoked tokens, and `/api/auth/logout` plus `/api/auth/logout-all` provide server-side revocation. Apply `007_web_session_revocation.sql` before deployment.
 - Web login, registration and password recovery use atomic account-and-network attempt limiting through migration `008_atomic_web_auth_rate_limit.sql`.
 - Supabase profile enumeration and browser receipt writes are blocked by migration `009_profile_and_receipt_rls_hardening.sql`.
+- The Web client now has a confirmed “Log out all devices” action; successful logout-all invalidates every token version and clears local browser device metadata.
 - Unimplemented call, attachments and More options controls are disabled. Stories are clearly marked unavailable; publishing is not wired up.
 
 ## Security fixes in the current work branch
@@ -52,13 +53,17 @@ Working branch: `fix/web-device-key-persistence`
 
 ## Latest verified CI snapshot
 
-Workflow: [GitHub Actions run 45238767834](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45238767834)
+Workflow: [GitHub Actions run 45328133034](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45328133034)  
+Validated commit: `ee4cab47d3230672e08252d3b53747ac38b06598`
 
-- Backend: **67 tests passed, 0 failed**.
-- Web: **TypeScript validation passed** and **Vite production build passed**.
-- Android debug APK build: **in progress at the time of this status snapshot**. Do not mark it passed until the job and artifact upload complete.
+- Backend: **77 tests passed, 0 failed**.
+- Backend dependency audit: passed.
+- Web dependency audit: passed, **0 vulnerabilities reported**.
+- Web TypeScript validation: passed.
+- Web production build: passed.
+- Android: `:app:assembleDebug` passed and the debug APK artifact upload completed successfully.
 
-The earlier CI run for commit `1e92ead0285db6068581edcd44276fb0d19a8062` completed all three jobs successfully, but a later PIN hardening change is being validated separately.
+These are CI build/test results. They do not prove the hosted Supabase migrations were applied, two physical devices exchanged messages, Firebase delivered pushes, or the cryptographic protocol is production-grade.
 
 ## Not complete / not production verified
 
