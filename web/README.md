@@ -41,8 +41,6 @@ For a new project, run these SQL files in the Supabase SQL Editor in this order:
 10. `web/database/migrations/009_profile_and_receipt_rls_hardening.sql` — prevents profile enumeration and forged browser-side message receipts.
 
 For an existing project, inspect which schema/migrations have already been applied and run only missing steps in dependency order. In particular, `chat-auth-bridge.sql` must be applied before custom-account registration, and migrations `007`, `008` and `009` must be applied before deploying the updated Web APIs because authenticated requests and auth flows fail closed when their security tables/functions are unavailable.
-5. `web/database/migrations/007_web_session_revocation.sql` — adds per-JWT session revocation storage; required before the updated Web APIs will accept authenticated requests.
-
 The migrations are committed source files; they are **not** applied to a hosted Supabase project automatically. After applying them, verify that the service-role API can perform expected writes and anon/authenticated browser roles cannot bypass the API.
 
 The separate `web/supabase/migrations/001_initial_schema.sql` describes the companion Supabase Auth/profile/conversation schema. Do not assume it is the backing schema for the custom `app_users` username/password API.
