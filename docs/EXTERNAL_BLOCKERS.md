@@ -1,7 +1,7 @@
 # NEWGEN CHAT — External blockers and remaining work
 
-Updated: 2026-11-23
-Source baseline: `cf19c0cb72391bab82dbe9c8bfdab8ad40238ab4`
+Updated: 2026-11-24
+Source baseline: `ee4cab47d3230672e08252d3b53747ac38b06598`
 
 | Area | Status | Required next action |
 |---|---|---|
