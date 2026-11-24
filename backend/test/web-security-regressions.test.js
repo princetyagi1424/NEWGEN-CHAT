@@ -84,3 +84,31 @@ test('server error logs do not print raw exception messages', () => {
   assert.doesNotMatch(server, /console\.error\([^\n]*\.message/);
   assert.doesNotMatch(chatPin, /console\.error\([^\n]*\.message/);
 });
+
+test('Web-issued JWTs have server-side revocation and authenticated routes enforce it', () => {
+  const helper = fs.readFileSync(path.join(repo, 'web/api/_lib/auth.js'), 'utf8');
+  const logout = fs.readFileSync(path.join(repo, 'web/api/auth/logout.js'), 'utf8');
+  const logoutAll = fs.readFileSync(path.join(repo, 'web/api/auth/logout-all.js'), 'utf8');
+  const migration = fs.readFileSync(path.join(repo, 'web/database/migrations/007_web_session_revocation.sql'), 'utf8');
+  assert.match(helper, /jti: randomUUID\(\)/);
+  assert.match(helper, /export async function isTokenRevoked/);
+  assert.match(helper, /\.eq\('jti', token\.jti\)/);
+  assert.match(logout, /app/); // endpoint is a Vercel function module, not an Express app
+  assert.match(logout, /revoked_tokens/);
+  assert.match(logout, /expires_at/);
+  assert.match(logoutAll, /token_version/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS public\.revoked_tokens/);
+  assert.match(migration, /REVOKE ALL ON TABLE public\.revoked_tokens FROM anon, authenticated/);
+  for (const file of [
+    'web/api/auth/chat-pin.js',
+    'web/api/conversations/index.js',
+    'web/api/conversations/direct.js',
+    'web/api/messages/index.js',
+    'web/api/friends/requests.js',
+    'web/api/users/search.js',
+    'web/api/me.js'
+  ]) {
+    const source = fs.readFileSync(path.join(repo, file), 'utf8');
+    assert.match(source, /isTokenRevoked/, file);
+  }
+});
