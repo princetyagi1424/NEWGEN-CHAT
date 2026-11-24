@@ -23,6 +23,8 @@ export default async function handler(req, res) {
         revoked_at: new Date().toISOString()
       }, { onConflict: 'jti' })
       if (revokeError) throw revokeError
+      const { error: channelError } = await db.from('realtime_session_channels').delete().eq('session_jti', token.jti)
+      if (channelError) throw channelError
     } else {
       // Legacy tokens have no unique identifier; revoke all sessions safely.
       const { error: updateError } = await db.from('app_users')

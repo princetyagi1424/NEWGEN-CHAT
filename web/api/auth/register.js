@@ -12,8 +12,10 @@ export default async function handler(req, res) {
     if (!(await consumeAuthAttempt(db, req, input.username, 5))) {
       return sendError(res, 429, 'Too many account-creation attempts. Try again in 15 minutes.')
     }
-    const passwordHash = await bcrypt.hash(input.password, 12)
-    const securityAnswerHash = await bcrypt.hash(securityAnswer, 12)
+    const [passwordHash, securityAnswerHash] = await Promise.all([
+      bcrypt.hash(input.password, 12),
+      bcrypt.hash(securityAnswer, 12),
+    ])
     const id = randomUUID()
     const { data, error } = await db.from('app_users')
       .insert({ id, username: input.username, password_hash: passwordHash, security_question: 'What was the name of your first school?', security_answer_hash: securityAnswerHash })
@@ -26,16 +28,8 @@ export default async function handler(req, res) {
       }
       throw error
     }
-    const { error: profileError } = await db.from('profiles').upsert({
-      id: data.id, username: data.username, display_name: data.username, updated_at: new Date().toISOString()
-    }, { onConflict: 'id' })
-    if (profileError) {
-      // Roll back the app_users row so retrying registration does not get stuck
-      // with a username that has no corresponding chat profile.
-      await db.from('app_users').delete().eq('id', data.id)
-      console.error('Profile initialization error:', profileError.code || 'profile_setup_failed')
-      return sendError(res, 503, 'Chat profile database is not initialized. Run web/database/chat-auth-bridge.sql in Supabase SQL Editor.')
-    }
+    // The app_users AFTER INSERT trigger creates the chat profile in the same
+    // database transaction, avoiding a second profile request.
     return res.status(201).json({ user: { id: data.id, username: data.username }, token: issueToken(data) })
   } catch (error) {
     const code = error?.code || error?.cause?.code

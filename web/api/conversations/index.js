@@ -16,38 +16,27 @@ export default async function handler(req, res) {
     const user = await getUser(req, db)
     if (!user) return sendError(res, 401, 'Authentication required')
     if (req.method === 'GET') {
-      const { data: memberships, error: membershipError } = await db.from('conversation_members').select('conversation_id,role').eq('user_id', user.id)
-      if (membershipError) throw membershipError
-      const ids = (memberships || []).map(x => x.conversation_id)
-      if (!ids.length) return res.status(200).json({ conversations: [] })
-      const { data: convs, error: convError } = await db.from('conversations').select('*').in('id', ids).order('updated_at', { ascending: false })
-      if (convError) throw convError
-      const output = []
-      for (const conv of convs || []) {
-        const { data: members, error: membersError } = await db.from('conversation_members').select('user_id,role').eq('conversation_id', conv.id)
-        if (membersError) throw membersError
-        const otherId = (members || []).find(m => m.user_id !== user.id)?.user_id
-        let otherProfile = null
-        if (otherId) {
-          const { data: p } = await db.from('profiles')
-            .select('id,username,display_name,avatar_url,bio,created_at,updated_at,last_seen_at')
-            .eq('id', otherId).maybeSingle()
-          if (p) {
-            let avatarUrl = p.avatar_url || null
-            if (avatarUrl && !(avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
-              const { data: signed } = await db.storage.from('newgen-profile-media').createSignedUrl(avatarUrl, 60 * 60 * 12)
-              avatarUrl = signed?.signedUrl || null
-            }
-            otherProfile = { ...p, display_name: p.display_name || p.username, avatar_url: avatarUrl }
-          } else {
-            const { data: fallback } = await db.from('app_users').select('id,username').eq('id', otherId).maybeSingle()
-            if (fallback) otherProfile = { id: fallback.id, username: fallback.username, display_name: fallback.username, avatar_url: null, bio: null, created_at: '', updated_at: '', last_seen_at: null }
-          }
-        }
-        const { data: lastRows, error: lastError } = await db.from('messages').select('id,conversation_id,sender_id,ciphertext,iv,content_type,created_at,expires_at,deleted_at').eq('conversation_id', conv.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(1)
-        if (lastError) throw lastError
-        if (lastRows?.[0]) output.push({ ...conv, members: members || [], otherProfile, lastMessage: lastRows[0] })
+      const { data, error } = await db.rpc('get_user_conversation_summaries', { p_user_id: user.id })
+      if (error) throw error
+      const conversations = Array.isArray(data) ? data : []
+      const avatarPaths = [...new Set(conversations
+        .map(item => item.otherProfile?.avatar_url)
+        .filter(path => typeof path === 'string' && path && !/^https?:\/\//i.test(path)))]
+
+      let signedByPath = new Map()
+      if (avatarPaths.length) {
+        const { data: signed, error: signedError } = await db.storage
+          .from('newgen-profile-media')
+          .createSignedUrls(avatarPaths, 60 * 60 * 12)
+        if (signedError) console.error('Conversation avatar signing failed:', signedError.code || 'storage_error')
+        signedByPath = new Map((signed || []).map(item => [item.path, item.signedUrl || null]))
       }
+
+      const output = conversations.map(item => {
+        const avatar = item.otherProfile?.avatar_url
+        if (!avatar || /^https?:\/\//i.test(avatar)) return item
+        return { ...item, otherProfile: { ...item.otherProfile, avatar_url: signedByPath.get(avatar) || null } }
+      })
       return res.status(200).json({ conversations: output })
     }
     if (req.method === 'POST') {

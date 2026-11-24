@@ -19,8 +19,12 @@ export default async function handler(req, res) {
       .update({ token_version: Number(user.token_version || 0) + 1 })
       .eq('id', user.id)
     if (updateError) throw updateError
-    const { error: revokeError } = await db.from('revoked_tokens').delete().eq('user_id', user.id)
-    if (revokeError) throw revokeError
+    const [revokeResult, channelResult] = await Promise.all([
+      db.from('revoked_tokens').delete().eq('user_id', user.id),
+      db.from('realtime_session_channels').delete().eq('user_id', user.id),
+    ])
+    if (revokeResult.error) throw revokeResult.error
+    if (channelResult.error) throw channelResult.error
     return res.status(204).end()
   } catch (error) {
     console.error('Web logout-all API error:', error?.code || error?.name || 'session_revoke_failed')

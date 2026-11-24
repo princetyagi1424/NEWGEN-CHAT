@@ -17,22 +17,9 @@ export default async function handler(req, res) {
     if (!user) return sendError(res, 401, 'Authentication required')
 
     if (req.method === 'GET') {
-      const { data, error } = await db.from('friend_requests').select('id,requester_id,recipient_id,status,created_at').or(`requester_id.eq.${user.id},recipient_id.eq.${user.id}`).order('created_at', { ascending: false }).limit(100)
+      const { data, error } = await db.rpc('get_user_friend_requests', { p_user_id: user.id })
       if (error) throw error
-      const ids = [...new Set((data || []).flatMap(row => [row.requester_id, row.recipient_id]).filter(id => id !== user.id))]
-      const { data: people, error: peopleError } = ids.length
-        ? await db.from('app_users').select('id,username').in('id', ids)
-        : { data: [], error: null }
-      if (peopleError) throw peopleError
-      const names = new Map((people || []).map(person => [person.id, person.username]))
-      return res.status(200).json({
-        requests: (data || []).map(row => ({
-          ...row,
-          other_user_id: row.requester_id === user.id ? row.recipient_id : row.requester_id,
-          other_username: names.get(row.requester_id === user.id ? row.recipient_id : row.requester_id) || 'unknown',
-          direction: row.recipient_id === user.id ? 'incoming' : 'outgoing',
-        })),
-      })
+      return res.status(200).json({ requests: Array.isArray(data) ? data : [] })
     }
 
     if (req.method === 'POST') {
@@ -44,12 +31,17 @@ export default async function handler(req, res) {
       if (target.id === user.id) return sendError(res, 400, 'You cannot send a request to yourself')
       const low = user.id < target.id ? user.id : target.id
       const high = user.id < target.id ? target.id : user.id
-      const { data: friendship, error: friendshipError } = await db.from('friendships').select('user_low').eq('user_low', low).eq('user_high', high).maybeSingle()
-      if (friendshipError) throw friendshipError
-      if (friendship) return sendError(res, 409, 'You are already connected')
-      const { data: existing, error: existingError } = await db.from('friend_requests').select('*').or(`and(requester_id.eq.${user.id},recipient_id.eq.${target.id}),and(requester_id.eq.${target.id},recipient_id.eq.${user.id})`).eq('status', 'pending').maybeSingle()
-      if (existingError) throw existingError
-      if (existing) return sendError(res, 409, 'A pending request already exists')
+      const [friendshipResult, existingResult] = await Promise.all([
+        db.from('friendships').select('user_low').eq('user_low', low).eq('user_high', high).maybeSingle(),
+        db.from('friend_requests').select('id')
+          .or(`and(requester_id.eq.${user.id},recipient_id.eq.${target.id}),and(requester_id.eq.${target.id},recipient_id.eq.${user.id})`)
+          .eq('status', 'pending')
+          .maybeSingle(),
+      ])
+      if (friendshipResult.error) throw friendshipResult.error
+      if (friendshipResult.data) return sendError(res, 409, 'You are already connected')
+      if (existingResult.error) throw existingResult.error
+      if (existingResult.data) return sendError(res, 409, 'A pending request already exists')
       const { data, error } = await db.from('friend_requests').insert({ requester_id: user.id, recipient_id: target.id }).select('id,status,created_at').single()
       if (error) throw error
       return res.status(201).json({ request: data, message: 'Connection request sent' })
@@ -59,26 +51,24 @@ export default async function handler(req, res) {
       const id = typeof req.body?.request_id === 'string' ? req.body.request_id : ''
       const action = req.body?.action
       if (!id || !['accept', 'decline', 'cancel'].includes(action)) return sendError(res, 400, 'Invalid request action')
-      const { data: request, error: requestError } = await db.from('friend_requests').select('*').eq('id', id).eq('status', 'pending').maybeSingle()
-      if (requestError) throw requestError
-      if (!request) return sendError(res, 404, 'Pending request not found')
-      if (action === 'accept' || action === 'decline') {
-        if (request.recipient_id !== user.id) return sendError(res, 403, 'Only the recipient can respond')
-      } else if (request.requester_id !== user.id) return sendError(res, 403, 'Only the sender can cancel')
-      const status = action === 'accept' ? 'accepted' : action === 'decline' ? 'declined' : 'cancelled'
-      const { error: updateError } = await db.from('friend_requests').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
-      if (updateError) throw updateError
-      if (action === 'accept') {
-        const low = request.requester_id < request.recipient_id ? request.requester_id : request.recipient_id
-        const high = request.requester_id < request.recipient_id ? request.recipient_id : request.requester_id
-        const { error: friendError } = await db.from('friendships').upsert({ user_low: low, user_high: high }, { onConflict: 'user_low,user_high' })
-        if (friendError) throw friendError
+      const { data: status, error: responseError } = await db.rpc('respond_friend_request', {
+        p_actor_id: user.id,
+        p_request_id: id,
+        p_action: action,
+      })
+      if (responseError) {
+        const reason = responseError.message || ''
+        if (reason.includes('pending_request_not_found')) return sendError(res, 404, 'Pending request not found')
+        if (reason.includes('forbidden')) return sendError(res, 403, 'You are not allowed to respond to this request')
+        if (reason.includes('invalid_request_action')) return sendError(res, 400, 'Invalid request action')
+        throw responseError
       }
       return res.status(200).json({ status })
     }
 
     return sendError(res, 405, 'Method not allowed')
   } catch (error) {
+    if (error?.code === '23505') return sendError(res, 409, 'A pending request already exists')
     console.error('Friend requests API error:', error?.code || error?.name || 'friend_request_failed')
     return sendError(res, 500, 'Could not process connection request')
   }

@@ -43,6 +43,11 @@ export default function ChatApp() {
   const [creatingChat, setCreatingChat] = useState(false)
   const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests'>('chats')
   const bottomRef = useRef<HTMLDivElement>(null)
+  const messageRequestVersion = useRef(0)
+  const messagesRef = useRef<VisibleMessage[]>([])
+  messagesRef.current = messages
+  const activeIdRef = useRef<string | null>(null)
+  activeIdRef.current = activeId
   const activeConv = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
   const isUnlocked = Boolean(passkey && activeId)
   const visibleConversations = conversations.filter(c => Boolean(c.lastMessage))
@@ -61,6 +66,7 @@ export default function ChatApp() {
   }, [])
 
   const lockChat = useCallback(() => {
+    messageRequestVersion.current += 1
     setPasskey(null)
     setPersonalPinEntry('')
     setPasskeyError('')
@@ -68,24 +74,124 @@ export default function ChatApp() {
   }, [])
 
   const loadRequests = useCallback(async () => {
-    if (!user) return
+    if (!user?.id) return
     try {
       const result = await apiRequest('/api/friends/requests')
       setRequests(result.requests ?? [])
     } catch (error) { console.error('Load connection requests failed:', error) }
-  }, [user, apiRequest])
+  }, [user?.id, apiRequest])
 
   const loadConversations = useCallback(async () => {
-    if (!user) return
+    if (!user?.id) return
     try {
       const result = await apiRequest('/api/conversations')
       setConversations(result.conversations ?? [])
     } catch (error) {
       console.error('Load conversations failed:', error)
     }
-  }, [user, apiRequest])
+  }, [user?.id, apiRequest])
 
   useEffect(() => { void loadConversations(); void loadRequests() }, [loadConversations, loadRequests])
+
+  const loadMessages = useCallback(async (
+    after?: string,
+    replace = false,
+    version = messageRequestVersion.current,
+  ) => {
+    if (!activeId || !user?.id) return
+    const cursor = after ? `&after=${encodeURIComponent(after)}` : ''
+    const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}${cursor}`)
+    const rows: VisibleMessage[] = await Promise.all((result.messages ?? []).map(async (message: Message) => {
+      if (!passkey) return { ...message, plaintext: undefined, locked: true }
+      try {
+        return { ...message, plaintext: await decryptWithConversationKey(passkey, message.ciphertext, message.iv), locked: false }
+      } catch {
+        return { ...message, plaintext: undefined, locked: true, decryptError: true }
+      }
+    }))
+    if (version !== messageRequestVersion.current) return
+    setMessages(previous => {
+      if (replace) return rows
+      const merged = new Map<string, VisibleMessage>(previous.map(message => [message.id, message]))
+      for (const message of rows) merged.set(message.id, message)
+      return [...merged.values()].sort((a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.id.localeCompare(b.id)
+      )
+    })
+  }, [activeId, passkey, user?.id, apiRequest])
+
+  const refreshNewMessages = useCallback(() => {
+    if (!activeId || !user?.id) return
+    const current = messagesRef.current
+    const cursor = current.length ? current[current.length - 1].created_at : undefined
+    void loadMessages(cursor, false, messageRequestVersion.current)
+  }, [activeId, user?.id, loadMessages])
+
+  const realtimeHandlersRef = useRef<{
+    requests: () => void
+    conversations: () => void
+    messages: () => void
+  }>({
+    requests: () => undefined,
+    conversations: () => undefined,
+    messages: () => undefined,
+  })
+  realtimeHandlersRef.current = {
+    requests: () => { void loadRequests() },
+    conversations: () => { void loadConversations() },
+    messages: refreshNewMessages,
+  }
+
+  useEffect(() => {
+    if (!user?.id) return
+    let active = true
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    const connect = async () => {
+      try {
+        const session = await apiRequest('/api/realtime/session')
+        if (!active || typeof session.channelToken !== 'string') return
+        channel = supabase.channel(`user:${session.channelToken}`, {
+          config: { broadcast: { self: false } },
+        })
+        channel
+          .on('broadcast', { event: 'refresh' }, event => {
+            const resource = event.payload?.resource
+            const handlers = realtimeHandlersRef.current
+            if (resource === 'friend_requests') handlers.requests()
+            if (resource === 'conversations') handlers.conversations()
+            if (resource === 'messages') {
+              handlers.messages()
+              handlers.conversations()
+            }
+          })
+          .subscribe(status => {
+            if (status === 'SUBSCRIBED') {
+              const handlers = realtimeHandlersRef.current
+              handlers.requests()
+              handlers.conversations()
+              handlers.messages()
+            }
+          })
+      } catch (error) {
+        if (active) console.warn('[NEWGEN] Realtime subscription unavailable; background sync remains active.', error)
+      }
+    }
+    void connect()
+    return () => {
+      active = false
+      if (channel) void supabase.removeChannel(channel)
+    }
+  }, [user?.id, apiRequest])
+
+  // Reconcile occasionally in case a device sleeps or a realtime packet is missed.
+  useEffect(() => {
+    if (!user?.id) return
+    const timer = window.setInterval(() => {
+      void loadRequests()
+      void loadConversations()
+    }, 30000)
+    return () => window.clearInterval(timer)
+  }, [user?.id, loadRequests, loadConversations])
 
   useEffect(() => {
     if (!user) return
@@ -98,32 +204,19 @@ export default function ChatApp() {
   }, [user, profile?.username])
 
   useEffect(() => {
-    if (!activeId || !user) { setMessages([]); return }
-    let cancelled = false
-    const refresh = async () => {
-      try {
-        const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
-        const rows: VisibleMessage[] = []
-        for (const message of result.messages ?? []) {
-          if (!passkey) {
-            rows.push({ ...message, plaintext: undefined, locked: true })
-          } else {
-            try {
-              rows.push({ ...message, plaintext: await decryptWithConversationKey(passkey, message.ciphertext, message.iv), locked: false })
-            } catch {
-              rows.push({ ...message, plaintext: undefined, locked: true, decryptError: true })
-            }
-          }
-        }
-        if (!cancelled) setMessages(rows)
-      } catch (error) {
-        if (!cancelled) console.error('Load messages failed:', error)
-      }
+    if (!activeId || !user?.id) {
+      messageRequestVersion.current += 1
+      setMessages([])
+      return
     }
-    void refresh()
-    const poll = window.setInterval(() => { void refresh() }, 2500)
-    return () => { cancelled = true; window.clearInterval(poll) }
-  }, [activeId, passkey, user, apiRequest])
+    const version = ++messageRequestVersion.current
+    void loadMessages(undefined, true, version).catch(error => console.error('Load messages failed:', error))
+    const fallback = window.setInterval(refreshNewMessages, 30000)
+    return () => {
+      window.clearInterval(fallback)
+      if (messageRequestVersion.current === version) messageRequestVersion.current += 1
+    }
+  }, [activeId, passkey, user?.id, loadMessages, refreshNewMessages])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
@@ -172,11 +265,21 @@ export default function ChatApp() {
 
   async function sendConnectionRequest(other: Profile) {
     try {
-      await apiRequest('/api/friends/requests', { method: 'POST', body: JSON.stringify({ username: other.username }) })
-      alert('Connection request sent.')
+      const result = await apiRequest('/api/friends/requests', {
+        method: 'POST', body: JSON.stringify({ username: other.username }),
+      })
+      const request = result.request
+      if (request?.id) {
+        setRequests(previous => [{
+          id: request.id,
+          other_user_id: other.id,
+          other_username: other.username,
+          direction: 'outgoing',
+          status: request.status || 'pending',
+        }, ...previous.filter(item => item.id !== request.id)])
+      }
       setSearch('')
       setSearchResults([])
-      await loadRequests()
     } catch (error) { alert(error instanceof Error ? error.message : 'Could not send request') }
   }
 
@@ -210,7 +313,7 @@ export default function ChatApp() {
   async function respondToRequest(request: ConnectionRequest, action: 'accept' | 'decline' | 'cancel') {
     try {
       await apiRequest('/api/friends/requests', { method: 'PATCH', body: JSON.stringify({ request_id: request.id, action }) })
-      await loadRequests()
+      setRequests(previous => previous.filter(item => item.id !== request.id))
       if (action === 'accept') {
         const other: Profile = { id: request.other_user_id, username: request.other_username, display_name: request.other_username, avatar_url: null, bio: null, created_at: '', updated_at: '', last_seen_at: null }
         await startDirectChat(other)
@@ -282,23 +385,57 @@ export default function ChatApp() {
   }
 
   async function sendMessage() {
-    if (!input.trim() || !activeId || !user || !passkey || sending) return
+    const textToSend = input.trim()
+    if (!textToSend || !activeId || !user || !passkey || sending) return
+    const conversationId = activeId
     setSending(true)
+    let optimisticId: string | null = null
     try {
-      const encrypted = await encryptWithConversationKey(passkey, input.trim())
-      await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`, {
+      const encrypted = await encryptWithConversationKey(passkey, textToSend)
+      optimisticId = `optimistic:${crypto.randomUUID()}`
+      const optimistic: VisibleMessage = {
+        id: optimisticId,
+        conversation_id: conversationId,
+        sender_id: user.id,
+        ciphertext: encrypted.ciphertext,
+        iv: encrypted.iv,
+        content_type: 'text',
+        media_path: null,
+        media_mime: null,
+        media_size: null,
+        reply_to: null,
+        created_at: new Date().toISOString(),
+        expires_at: null,
+        deleted_at: null,
+        plaintext: textToSend,
+        locked: false,
+      }
+      if (activeIdRef.current === conversationId) setMessages(previous => [...previous, optimistic])
+      setInput('')
+      const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(conversationId)}`, {
         method: 'POST', body: JSON.stringify(encrypted),
       })
-      setInput('')
-      const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
-      const visible: VisibleMessage[] = []
-      for (const m of result.messages ?? []) {
-        try { visible.push({ ...m, plaintext: await decryptWithConversationKey(passkey, m.ciphertext, m.iv), locked: false }) }
-        catch { visible.push({ ...m, locked: true, decryptError: true }) }
+      const saved = result.message as Message | undefined
+      if (!saved?.id) throw new Error('The message was not confirmed by the server.')
+      if (activeIdRef.current === conversationId) {
+        setMessages(previous => {
+          const next = previous.filter(message => message.id !== optimisticId && message.id !== saved.id)
+          next.push({ ...saved, plaintext: textToSend, locked: false })
+          return next.sort((a, b) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.id.localeCompare(b.id)
+          )
+        })
       }
-      setMessages(visible)
-      await loadConversations()
+      setConversations(previous => previous.map(conversation =>
+        conversation.id === conversationId
+          ? { ...conversation, updated_at: saved.created_at, lastMessage: saved }
+          : conversation
+      ).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()))
     } catch (error) {
+      if (optimisticId && activeIdRef.current === conversationId) {
+        setMessages(previous => previous.filter(message => message.id !== optimisticId))
+        setInput(previous => previous || textToSend)
+      }
       alert(error instanceof Error ? error.message : 'Message could not be sent')
     } finally {
       setSending(false)

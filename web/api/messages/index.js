@@ -16,7 +16,19 @@ export default async function handler(req, res) {
     if (!membership) return sendError(res, 403, 'You are not a member of this conversation')
 
     if (req.method === 'GET') {
-      const { data, error } = await db.from('messages').select('id,conversation_id,sender_id,ciphertext,iv,content_type,media_path,media_mime,media_size,reply_to,created_at,expires_at,deleted_at').eq('conversation_id', conversationId).is('deleted_at', null).order('created_at', { ascending: true }).limit(200)
+      const after = typeof req.query?.after === 'string' ? req.query.after : ''
+      if (after && (!Number.isFinite(Date.parse(after)) || after.length > 40)) {
+        return sendError(res, 400, 'Invalid message cursor')
+      }
+      let query = db.from('messages')
+        .select('id,conversation_id,sender_id,ciphertext,iv,content_type,media_path,media_mime,media_size,reply_to,created_at,expires_at,deleted_at')
+        .eq('conversation_id', conversationId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .limit(after ? 100 : 200)
+      if (after) query = query.gt('created_at', after)
+      const { data, error } = await query
       if (error) throw error
       return res.status(200).json({ messages: data || [] })
     }
@@ -31,7 +43,6 @@ export default async function handler(req, res) {
         conversation_id: conversationId, sender_id: token.sub, ciphertext, iv, content_type: 'text'
       }).select('*').single()
       if (error) throw error
-      await db.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId)
       return res.status(201).json({ message: data })
     }
     return sendError(res, 405, 'Method not allowed')

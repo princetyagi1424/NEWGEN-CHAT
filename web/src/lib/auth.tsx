@@ -88,7 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextUser)
       // Register this browser's device identity locally; server-side device-key
       // registration will be connected with the account security workflow.
-      await getOrCreateDeviceIdentity().catch(() => null)
+      // Device-key provisioning is local and optional; do not hold up sign-in.
+      void getOrCreateDeviceIdentity().catch(() => undefined)
       return { error: null }
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Could not create account.' }
@@ -102,7 +103,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem(TOKEN_KEY, data.token)
       sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
       setUser(nextUser)
-      await getOrCreateDeviceIdentity().catch(() => null)
+      // Device-key provisioning is local and optional; do not hold up sign-in.
+      void getOrCreateDeviceIdentity().catch(() => undefined)
       return { error: null }
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Could not sign in.' }

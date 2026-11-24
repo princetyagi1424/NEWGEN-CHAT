@@ -20,6 +20,8 @@ export default async function handler(req, res) {
     const passwordHash = await bcrypt.hash(input.password, 12)
     const { error: updateError } = await db.from('app_users').update({ password_hash: passwordHash, token_version: Number(user.token_version || 0) + 1 }).eq('id', user.id)
     if (updateError) throw updateError
+    const { error: channelError } = await db.from('realtime_session_channels').delete().eq('user_id', user.id)
+    if (channelError) throw channelError
     return res.status(200).json({ status: 'password_reset', message: 'Password reset. Sign in with your new password.' })
   } catch (error) {
     const code = error?.code || error?.cause?.code
