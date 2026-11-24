@@ -37,8 +37,9 @@ For a new project, run these SQL files in the Supabase SQL Editor in this order:
 6. `web/database/migrations/005_atomic_chat_pin_rate_limit.sql` — installs the atomic, account-wide 8-attempt / 15-minute PIN and security-answer limiter.
 7. `web/database/migrations/006_server_only_conversation_writes.sql` — makes conversation and message writes go through authenticated server APIs rather than direct browser table writes.
 8. `web/database/migrations/007_web_session_revocation.sql` — creates the service-only table used to revoke individual Web JWT sessions.
+9. `web/database/migrations/008_atomic_web_auth_rate_limit.sql` — enables atomic account-and-network throttling for Web login, registration and password recovery.
 
-For an existing project, inspect which schema/migrations have already been applied and run only missing steps in dependency order. In particular, `chat-auth-bridge.sql` must be applied before custom-account registration, and migration `007` must be applied before deploying the updated Web APIs because authenticated requests now fail closed when the revocation table is unavailable.
+For an existing project, inspect which schema/migrations have already been applied and run only missing steps in dependency order. In particular, `chat-auth-bridge.sql` must be applied before custom-account registration, and migrations `007` and `008` must be applied before deploying the updated Web APIs because authenticated requests and auth flows fail closed when their security tables/functions are unavailable.
 5. `web/database/migrations/007_web_session_revocation.sql` — adds per-JWT session revocation storage; required before the updated Web APIs will accept authenticated requests.
 
 The migrations are committed source files; they are **not** applied to a hosted Supabase project automatically. After applying them, verify that the service-role API can perform expected writes and anon/authenticated browser roles cannot bypass the API.
