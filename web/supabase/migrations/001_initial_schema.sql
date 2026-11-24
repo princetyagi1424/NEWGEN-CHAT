@@ -83,9 +83,13 @@ alter table public.messages enable row level security;
 alter table public.message_receipts enable row level security;
 alter table public.push_subscriptions enable row level security;
 
-create policy "profiles_select" on public.profiles for select to authenticated using (true);
-create policy "profiles_insert" on public.profiles for insert to authenticated with check (auth.uid() = id);
-create policy "profiles_update" on public.profiles for update to authenticated using (auth.uid() = id);
+-- Profiles contain privacy-sensitive metadata (including last_seen_at).
+-- The custom-account Vercel APIs use service_role; browser clients must not
+-- enumerate profiles or bypass those APIs.
+DROP POLICY IF EXISTS "profiles_select" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_insert" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update" ON public.profiles;
+REVOKE ALL ON TABLE public.profiles FROM anon, authenticated;
 
 create policy "devices_own" on public.devices for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
@@ -114,7 +118,13 @@ create policy "messages_select" on public.messages for select to authenticated u
 REVOKE INSERT, UPDATE, DELETE ON TABLE public.messages FROM anon, authenticated;
 GRANT SELECT ON TABLE public.messages TO authenticated;
 
-create policy "receipts_own" on public.message_receipts for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+-- Receipts are written only by an authenticated server API after verifying
+-- message recipient and conversation membership. Browser clients may read only
+-- receipt rows assigned to their own user ID; direct writes could forge read state.
+DROP POLICY IF EXISTS "receipts_own" ON public.message_receipts;
+CREATE POLICY "receipts_select_own" ON public.message_receipts FOR SELECT TO authenticated USING (auth.uid() = user_id);
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.message_receipts FROM anon, authenticated;
+GRANT SELECT ON TABLE public.message_receipts TO authenticated;
 create policy "push_own" on public.push_subscriptions for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- After tables exist, enable Realtime in Dashboard or:
