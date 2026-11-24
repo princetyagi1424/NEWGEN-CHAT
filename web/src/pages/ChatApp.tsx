@@ -39,6 +39,9 @@ export default function ChatApp() {
   const [setupPin, setSetupPin] = useState('')
   const [setupPinConfirm, setSetupPinConfirm] = useState('')
   const [setupSecurityAnswer, setSetupSecurityAnswer] = useState('')
+  const [setupSecurityQuestion, setSetupSecurityQuestion] = useState('What was the name of your first school?')
+  const [hasPersonalPin, setHasPersonalPin] = useState(false)
+  const [loadingPinSettings, setLoadingPinSettings] = useState(false)
   const [setupPinError, setSetupPinError] = useState('')
   const [savingPin, setSavingPin] = useState(false)
   const [creatingChat, setCreatingChat] = useState(false)
@@ -272,12 +275,22 @@ export default function ChatApp() {
     } catch (error) { alert(error instanceof Error ? error.message : 'Could not send request') }
   }
 
-  function configurePersonalPin() {
+  async function configurePersonalPin() {
     setSetupPin('')
     setSetupPinConfirm('')
     setSetupSecurityAnswer('')
     setSetupPinError('')
     setShowPinSetup(true)
+    setLoadingPinSettings(true)
+    try {
+      const settings = await apiRequest('/api/auth/chat-pin')
+      setSetupSecurityQuestion(typeof settings.securityQuestion === 'string' && settings.securityQuestion.trim() ? settings.securityQuestion : 'Your account security question')
+      setHasPersonalPin(settings.hasPin === true)
+    } catch (error) {
+      setSetupPinError(error instanceof Error ? error.message : 'Could not load PIN settings')
+    } finally {
+      setLoadingPinSettings(false)
+    }
   }
 
   async function savePersonalPin(event: React.FormEvent<HTMLFormElement>) {
@@ -288,7 +301,8 @@ export default function ChatApp() {
     setSavingPin(true)
     setSetupPinError('')
     try {
-      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'set', pin: setupPin, securityAnswer: setupSecurityAnswer }) })
+      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: hasPersonalPin ? 'change' : 'set', pin: setupPin, securityAnswer: setupSecurityAnswer }) })
+      setHasPersonalPin(true)
       setShowPinSetup(false)
       setSetupPin('')
       setSetupPinConfirm('')
@@ -558,18 +572,19 @@ export default function ChatApp() {
                 <button type="button" onClick={() => setShowPinSetup(false)} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-emerald-700"><ArrowLeft className="h-4 w-4"/> Back</button>
                 <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 text-emerald-600"><ShieldCheck className="h-8 w-8"/></div>
                 <p className="text-center text-[10px] font-extrabold uppercase tracking-[.22em] text-emerald-500">Account privacy</p>
-                <h1 className="mt-2 text-center text-2xl font-black tracking-tight">Create your personal passkey</h1>
-                <p className="mt-2 text-center text-sm leading-6 text-slate-400">This PIN belongs only to your account. You can use a different PIN from the person you chat with. To change it later, verify your security answer.</p>
+                <h1 className="mt-2 text-center text-2xl font-black tracking-tight">{hasPersonalPin ? 'Change your personal PIN' : 'Create your personal PIN'}</h1>
+                <p className="mt-2 text-center text-sm leading-6 text-slate-400">{hasPersonalPin ? 'Verify your saved security answer to replace your existing PIN.' : 'This PIN belongs only to your account. You can use a different PIN from the person you chat with.'}</p>
                 <form onSubmit={savePersonalPin} className="mt-6 space-y-3">
                   <label className="block text-left text-xs font-bold text-slate-600">New personal PIN</label>
                   <input required type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={12} value={setupPin} onChange={e=>setSetupPin(e.target.value.replace(/\D/g,''))} placeholder="4–12 digits" className="pin-mask w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"/>
                   <label className="block text-left text-xs font-bold text-slate-600">Confirm personal PIN</label>
                   <input required type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={12} value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value.replace(/\D/g,''))} placeholder="Re-enter your PIN" className="pin-mask w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"/>
                   <label className="block text-left text-xs font-bold text-slate-600">Security question</label>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-600">What was the name of your first school?</div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-600">{setupSecurityQuestion}</div>
                   <input required type="text" autoComplete="off" value={setupSecurityAnswer} onChange={e=>setSetupSecurityAnswer(e.target.value)} placeholder="Your saved security answer" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"/>
+                  {loadingPinSettings && <p className="text-center text-xs text-slate-400">Loading your security settings…</p>}
                   {setupPinError && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-left text-xs text-rose-600">{setupPinError}</p>}
-                  <button type="submit" disabled={savingPin} className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-emerald-200 disabled:opacity-50">{savingPin?'Saving securely…':'Save personal passkey'}</button>
+                  <button type="submit" disabled={savingPin || loadingPinSettings} className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-emerald-200 disabled:opacity-50">{savingPin?'Saving securely…':hasPersonalPin?'Update personal PIN':'Set personal PIN'}</button>
                 </form>
                 <p className="mt-4 text-center text-[10px] leading-4 text-slate-400">Your PIN is stored as a one-way hash and is never displayed again.</p>
               </div>
