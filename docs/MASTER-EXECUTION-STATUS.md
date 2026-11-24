@@ -2,7 +2,9 @@
 
 Updated: 2026-11-24  
 Repository: `princetyagi1424/NEWGEN-CHAT`  
-Working branch: `fix/web-device-key-persistence`
+Branch: `main`  
+Merged PR: [#3](https://github.com/princetyagi1424/NEWGEN-CHAT/pull/3)  
+Main commit: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
 
 ## Overall status
 
@@ -10,7 +12,7 @@ Working branch: `fix/web-device-key-persistence`
 
 This branch contains a source audit and a set of concrete Web, Supabase RLS, PIN, group-ownership, CI and documentation fixes. It does not complete the full master request: production-grade E2EE, complete Stories, WebRTC calls, live push, production deployment and multi-device recovery still require significant implementation and owner-managed infrastructure.
 
-The `main` branch has not been force-updated. Merge only the latest branch head after all applicable CI checks pass.
+The security-hardening work was merged to `main` through PR #3 after all PR CI checks passed. The merged main commit and post-merge workflow are recorded below.
 
 ## Implemented in this execution branch
 
@@ -26,16 +28,14 @@ The `main` branch has not been force-updated. Merge only the latest branch head 
 10. Backend and Web API error logs were changed to avoid printing raw exception messages.
 11. CI explicitly runs Web TypeScript validation, Web production build, backend tests and Android debug APK build.
 12. Regression tests and the security, implementation, deployment and blocker documentation have been updated.
-## Latest verified CI snapshot
+## Latest verified main CI snapshot
 
-Workflow: [run 45328133034](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45328133034)  
-Validated commit: `ee4cab47d3230672e08252d3b53747ac38b06598`
+Workflow: [run 45328833092](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45328833092)  
+Main SHA: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
 
 - Backend: 77 tests passed, 0 failed; backend dependency audit passed.
-- Web: npm audit passed with 0 vulnerabilities reported; TypeScript validation and production build passed.
-- Android: debug APK assembled and artifact upload passed.
-
-This is CI evidence only—not live Supabase, Firebase, two-device, call or production E2EE validation.
+- Web: dependency audit passed with 0 vulnerabilities reported; TypeScript validation and production build passed.
+- Android: debug APK build and artifact upload passed.
 
 ## Remaining acceptance gaps
 
@@ -64,9 +64,9 @@ This is CI evidence only—not live Supabase, Firebase, two-device, call or prod
 
 ## Required Supabase migrations
 
-For a new Web project, follow the ordered setup in `web/README.md`: base Supabase schema, custom `app_users` schema, profile bridge, PIN schema, then security migrations 004–009. For an existing project, inspect which have already been applied and run only missing migrations in dependency order:
+For a new Web project, follow the full order in `web/README.md`: Supabase base schema, custom `app_users` schema, profile bridge, PIN schema, then security migrations 004–009. For an existing project, inspect which migrations have already been applied and run only missing migrations in dependency order:
 
-1. `web/database/migrations/2026-11-23-chat-unlock-pin.sql` (if PIN schema is absent).
+1. `2026-11-23-chat-unlock-pin.sql` (if the PIN schema is absent).
 2. `004_membership_rls_hardening.sql`.
 3. `005_atomic_chat_pin_rate_limit.sql`.
 4. `006_server_only_conversation_writes.sql`.
@@ -74,7 +74,7 @@ For a new Web project, follow the ordered setup in `web/README.md`: base Supabas
 6. `008_atomic_web_auth_rate_limit.sql`.
 7. `009_profile_and_receipt_rls_hardening.sql`.
 
-Apply them in Supabase SQL Editor and verify server-role success plus anon/authenticated denial. A committed migration is not proof of a hosted database change. Do not paste secrets into chat or commit them.
+Apply in Supabase SQL Editor and verify service-role success plus anon/authenticated denial. Committed migrations are not evidence that the hosted DB has been changed. Never commit or paste secrets.
 
 ## Release rule
 

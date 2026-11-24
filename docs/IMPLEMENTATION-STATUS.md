@@ -1,7 +1,9 @@
 # NEWGEN CHAT — Implementation status
 
 Updated: 2026-11-24  
-Working branch: `fix/web-device-key-persistence`
+Branch: `main`  
+Merged PR: [#3](https://github.com/princetyagi1424/NEWGEN-CHAT/pull/3)  
+Main commit: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
 
 ## Connected source features
 
@@ -51,19 +53,19 @@ Working branch: `fix/web-device-key-persistence`
 - Web JWTs now use `jti` revocation across all protected Vercel APIs; login/register/recovery use atomic account/network quotas; profile enumeration and direct receipt writes are blocked by Supabase RLS migrations 007–009.
 - Disabled Web actions that were shown but had no implementation.
 
-## Latest verified CI snapshot
+## Latest verified main CI snapshot
 
-Workflow: [GitHub Actions run 45328133034](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45328133034)  
-Validated commit: `ee4cab47d3230672e08252d3b53747ac38b06598`
+Workflow: [GitHub Actions run 45328833092](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45328833092)  
+Validated main commit: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
 
 - Backend: **77 tests passed, 0 failed**.
 - Backend dependency audit: passed.
 - Web dependency audit: passed, **0 vulnerabilities reported**.
 - Web TypeScript validation: passed.
 - Web production build: passed.
-- Android: `:app:assembleDebug` passed and the debug APK artifact upload completed successfully.
+- Android: `:app:assembleDebug` passed; debug APK artifact upload passed.
 
-These are CI build/test results. They do not prove the hosted Supabase migrations were applied, two physical devices exchanged messages, Firebase delivered pushes, or the cryptographic protocol is production-grade.
+These are source/CI validations only. They do not prove hosted Supabase migrations, Firebase delivery, physical two-device exchanges, calls or production-grade E2EE.
 
 ## Not complete / not production verified
 
