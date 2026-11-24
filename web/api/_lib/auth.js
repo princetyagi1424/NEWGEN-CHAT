@@ -27,7 +27,7 @@ export function validateCredentials(body) {
   return { username, password }
 }
 export function issueToken(user) {
-  return jwt.sign({ sub: user.id, username: user.username, ver: Number(user.token_version || 0) }, getJwtSecret(), {
+  return jwt.sign({ sub: user.id, username: user.username, ver: Number(user.token_version || 0), jti: randomUUID() }, getJwtSecret(), {
     expiresIn: process.env.TOKEN_TTL || '7d', issuer: 'newgen-chat', algorithm: 'HS256'
   })
 }
@@ -38,3 +38,17 @@ export function readBearer(req) {
   catch { return null }
 }
 export { bcrypt, randomUUID }
+
+
+/** True when this unique JWT has been explicitly revoked. Legacy tokens without
+ * jti remain covered by token_version checks until they expire. */
+export async function isTokenRevoked(db, token) {
+  if (!token?.jti) return false
+  const { data, error } = await db.from('revoked_tokens')
+    .select('jti')
+    .eq('jti', token.jti)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle()
+  if (error) throw error
+  return Boolean(data)
+}
