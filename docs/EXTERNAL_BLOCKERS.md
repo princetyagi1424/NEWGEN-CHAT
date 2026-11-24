@@ -5,7 +5,8 @@ Source baseline: `cf19c0cb72391bab82dbe9c8bfdab8ad40238ab4`
 
 | Area | Status | Required next action |
 |---|---|---|
-| Supabase membership RLS hardening | Implemented in source; hosted DB not verified | Apply `web/database/migrations/004_membership_rls_hardening.sql`, `005_atomic_chat_pin_rate_limit.sql` and `006_server_only_conversation_writes.sql` in Supabase SQL Editor and test anon/authenticated/service_role behavior |
+| Supabase membership RLS hardening | Implemented in source; hosted DB not verified | Apply `web/database/migrations/004_membership_rls_hardening.sql`, `005_atomic_chat_pin_rate_limit.sql`, `006_server_only_conversation_writes.sql` and `007_web_session_revocation.sql` in Supabase SQL Editor and test anon/authenticated/service_role behavior |
+| Web JWT session revocation | Web tokens now include `jti`; protected Vercel APIs check the service-only revoked-token table, with current-session logout and logout-all endpoints | Apply `007_web_session_revocation.sql` in Supabase before deploying the updated Web APIs |
 | PIN response + atomic throttling | Code fix and atomic RPC migration | Apply `005_atomic_chat_pin_rate_limit.sql` and verify concurrent account-wide 8-attempt throttling on hosted Supabase |
 | Browser device-key creation | Code fix + source regression test | Run in real supported browsers; verify IndexedDB CryptoKey persistence and reload |
 | Group ownership transfer | Backend endpoint + static contract test | Add Android/Web admin UI and run live authorization tests |
