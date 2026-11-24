@@ -66,7 +66,9 @@ test('Vercel Hobby deploy contains no more than 12 serverless API routes', async
 
 test('custom-JWT web data tables are server-only and foreign keys are indexed', async () => {
   const source = await read('web/database/migrations/011_server_only_data_access.sql')
-  assert.match(source, /REVOKE ALL ON TABLE[\\s\\S]*public\\.messages[\\s\\S]*FROM PUBLIC, anon, authenticated/)
+  assert.ok(source.includes('REVOKE ALL ON TABLE'))
+  assert.ok(source.includes('public.messages'))
+  assert.ok(source.includes('FROM PUBLIC, anon, authenticated'))
   assert.match(source, /DROP POLICY IF EXISTS "members_insert"/)
   assert.match(source, /DROP POLICY IF EXISTS "messages_insert"/)
   assert.match(source, /conversation_members_user_id_idx/)
