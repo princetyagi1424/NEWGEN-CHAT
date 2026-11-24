@@ -31,9 +31,9 @@ Working branch: `fix/web-device-key-persistence`
 - React/TypeScript/Vite app with username/password auth, friend requests, conversation list, direct/group conversation APIs, message timeline and local passphrase gate.
 - PIN setup/change and in-chat PIN verification endpoint with bcrypt hashes.
 - Browser device identity persistence with non-extractable private key storage in IndexedDB.
-- Web access tokens are tab-scoped in `sessionStorage` (still readable by same-origin JavaScript); each JWT has a `jti`, Vercel APIs reject revoked tokens, and `/api/auth/logout` plus `/api/auth/logout-all` support server-side revocation.
+- Web access tokens are tab-scoped in `sessionStorage` (still readable by same-origin JavaScript); each JWT has a `jti`, protected Vercel APIs reject revoked tokens, and `/api/auth/logout` plus `/api/auth/logout-all` provide server-side revocation. Apply `007_web_session_revocation.sql` before deployment.
 - Web login, registration and password recovery use atomic account-and-network attempt limiting through migration `008_atomic_web_auth_rate_limit.sql`.
-- Supabase profile enumeration and browser receipt writes are blocked by migration `009_profile_and_receipt_rls_hardening.sql`. New Web JWTs carry `jti`; authenticated Vercel APIs check server-side revocation, with `/api/auth/logout` and `/api/auth/logout-all` endpoints. Apply migration `007_web_session_revocation.sql` before deploying these APIs.
+- Supabase profile enumeration and browser receipt writes are blocked by migration `009_profile_and_receipt_rls_hardening.sql`.
 - Unimplemented call, attachments and More options controls are disabled. Stories are clearly marked unavailable; publishing is not wired up.
 
 ## Security fixes in the current work branch
@@ -47,6 +47,7 @@ Working branch: `fix/web-device-key-persistence`
 - Android explicit logout/account deletion clears the local SessionStore, encrypted ChatPasskeyStore and decrypted private media cache. A failed session restore clears only the token so temporary connectivity failure cannot destroy local message keys.
 - Hardened group ownership: only the owner can transfer ownership or remove another admin; the current owner cannot be removed before transfer.
 - Added regression tests for these cases and explicit Web TypeScript validation in CI.
+- Web JWTs now use `jti` revocation across all protected Vercel APIs; login/register/recovery use atomic account/network quotas; profile enumeration and direct receipt writes are blocked by Supabase RLS migrations 007–009.
 - Disabled Web actions that were shown but had no implementation.
 
 ## Latest verified CI snapshot
