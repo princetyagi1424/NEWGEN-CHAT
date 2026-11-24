@@ -20,7 +20,7 @@ type VisibleMessage = Message & { plaintext?: string; locked?: boolean; decryptE
 type ConnectionRequest = { id: string; other_user_id: string; other_username: string; direction: 'incoming' | 'outgoing'; status: string }
 
 export default function ChatApp() {
-  const { user, profile, signOut, signOutAll } = useAuth()
+  const { user, profile, signOut, signOutAll, realtimeChannelToken } = useAuth()
   const [conversations, setConversations] = useState<ConvWithMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<VisibleMessage[]>([])
@@ -122,8 +122,9 @@ export default function ChatApp() {
 
   const refreshNewMessages = useCallback(() => {
     if (!activeId || !user?.id) return
-    const current = messagesRef.current
-    const cursor = current.length ? current[current.length - 1].created_at : undefined
+    const current = messagesRef.current.filter(message => !message.id.startsWith('optimistic:'))
+    const last = current[current.length - 1]
+    const cursor = last ? `${last.created_at}|${last.id}` : undefined
     void loadMessages(cursor, false, messageRequestVersion.current)
   }, [activeId, user?.id, loadMessages])
 
@@ -143,45 +144,31 @@ export default function ChatApp() {
   }
 
   useEffect(() => {
-    if (!user?.id) return
-    let active = true
-    let channel: ReturnType<typeof supabase.channel> | null = null
-    const connect = async () => {
-      try {
-        const session = await apiRequest('/api/realtime/session')
-        if (!active || typeof session.channelToken !== 'string') return
-        channel = supabase.channel(`user:${session.channelToken}`, {
-          config: { broadcast: { self: false } },
-        })
-        channel
-          .on('broadcast', { event: 'refresh' }, event => {
-            const resource = event.payload?.resource
-            const handlers = realtimeHandlersRef.current
-            if (resource === 'friend_requests') handlers.requests()
-            if (resource === 'conversations') handlers.conversations()
-            if (resource === 'messages') {
-              handlers.messages()
-              handlers.conversations()
-            }
-          })
-          .subscribe(status => {
-            if (status === 'SUBSCRIBED') {
-              const handlers = realtimeHandlersRef.current
-              handlers.requests()
-              handlers.conversations()
-              handlers.messages()
-            }
-          })
-      } catch (error) {
-        if (active) console.warn('[NEWGEN] Realtime subscription unavailable; background sync remains active.', error)
-      }
-    }
-    void connect()
-    return () => {
-      active = false
-      if (channel) void supabase.removeChannel(channel)
-    }
-  }, [user?.id, apiRequest])
+    if (!user?.id || !realtimeChannelToken) return
+    const channel = supabase.channel(`user:${realtimeChannelToken}`, {
+      config: { broadcast: { self: false } },
+    })
+    channel
+      .on('broadcast', { event: 'refresh' }, event => {
+        const resource = event.payload?.resource
+        const handlers = realtimeHandlersRef.current
+        if (resource === 'friend_requests') handlers.requests()
+        if (resource === 'conversations') handlers.conversations()
+        if (resource === 'messages') {
+          handlers.messages()
+          handlers.conversations()
+        }
+      })
+      .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+          const handlers = realtimeHandlersRef.current
+          handlers.requests()
+          handlers.conversations()
+          handlers.messages()
+        }
+      })
+    return () => { void supabase.removeChannel(channel) }
+  }, [user?.id, realtimeChannelToken])
 
   // Reconcile occasionally in case a device sleeps or a realtime packet is missed.
   useEffect(() => {

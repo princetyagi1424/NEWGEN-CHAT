@@ -17,7 +17,12 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const after = typeof req.query?.after === 'string' ? req.query.after : ''
-      if (after && (!Number.isFinite(Date.parse(after)) || after.length > 40)) {
+      const [afterCreatedAt, afterId] = after ? after.split('|') : ['', '']
+      if (after && (
+        after.length > 80 ||
+        !Number.isFinite(Date.parse(afterCreatedAt)) ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(afterId)
+      )) {
         return sendError(res, 400, 'Invalid message cursor')
       }
       let query = db.from('messages')
@@ -27,7 +32,9 @@ export default async function handler(req, res) {
         .order('created_at', { ascending: true })
         .order('id', { ascending: true })
         .limit(after ? 100 : 200)
-      if (after) query = query.gt('created_at', after)
+      if (after) {
+        query = query.or(`created_at.gt.${afterCreatedAt},and(created_at.eq.${afterCreatedAt},id.gt.${afterId})`)
+      }
       const { data, error } = await query
       if (error) throw error
       return res.status(200).json({ messages: data || [] })

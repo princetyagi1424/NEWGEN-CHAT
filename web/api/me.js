@@ -1,4 +1,4 @@
-import { getDb, readBearer, sendError, isTokenRevoked, randomUUID } from './_lib/auth.js'
+import { getDb, readBearer, sendError, isTokenRevoked, randomUUID, createRealtimeChannelToken } from './_lib/auth.js'
 import storiesHandler from './_lib/stories.js'
 
 const PROFILE_BUCKET = 'newgen-profile-media'
@@ -13,7 +13,7 @@ async function currentUser(req, db) {
     .maybeSingle()
   if (error) throw error
   if (!data || Number(data.token_version) !== Number(token.ver || 0) || await isTokenRevoked(db, token)) return null
-  return data
+  return { ...data, sessionJti: token.jti, sessionExpiresAt: token.exp }
 }
 
 function decodeImageDataUrl(value, maxBytes) {
@@ -64,9 +64,24 @@ export default async function handler(req, res) {
     if (!user) return sendError(res, 401, 'Authentication required')
 
     if (req.method === 'GET') {
+      let realtimeChannelToken = null
+      const channelSetup = user.sessionJti && Number.isFinite(Number(user.sessionExpiresAt))
+        ? (async () => {
+            realtimeChannelToken = createRealtimeChannelToken({ jti: user.sessionJti })
+            const { error } = await db.from('realtime_session_channels').upsert({
+              session_jti: user.sessionJti,
+              user_id: user.id,
+              channel_token: realtimeChannelToken,
+              expires_at: new Date(Number(user.sessionExpiresAt) * 1000).toISOString(),
+            }, { onConflict: 'session_jti' })
+            if (error) throw error
+          })()
+        : Promise.resolve()
+      const [profile] = await Promise.all([profileResponse(db, user), channelSetup])
       return res.status(200).json({
         user: { id: user.id, username: user.username },
-        profile: await profileResponse(db, user)
+        profile,
+        realtimeChannelToken,
       })
     }
 

@@ -8,7 +8,9 @@ const read = path => readFile(resolve(root, path), 'utf8')
 
 test('chat uses server-triggered realtime invalidation on opaque per-session topics', async () => {
   const migration = await read('web/database/migrations/012_realtime_delivery_and_fast_reads.sql')
-  const endpoint = await read('web/api/realtime/session.js')
+  const me = await read('web/api/me.js')
+  const authLibrary = await read('web/api/_lib/auth.js')
+  const auth = await read('web/src/lib/auth.tsx')
   const chat = await read('web/src/pages/ChatApp.tsx')
 
   assert.match(migration, /realtime_session_channels/)
@@ -16,10 +18,13 @@ test('chat uses server-triggered realtime invalidation on opaque per-session top
   assert.match(migration, /AFTER INSERT OR UPDATE OF status ON public\.friend_requests/)
   assert.match(migration, /AFTER INSERT OR UPDATE OR DELETE ON public\.messages/)
   assert.match(migration, /REVOKE ALL ON TABLE public\.realtime_session_channels FROM PUBLIC, anon, authenticated/)
-  assert.match(endpoint, /randomUUID\(\).*randomUUID\(\)/)
-  assert.match(endpoint, /expires_at/)
+  assert.match(authLibrary, /createHmac\('sha256'/)
+  assert.match(me, /realtime_session_channels/)
+  assert.match(me, /realtimeChannelToken/)
+  assert.match(auth, /realtimeChannelToken/)
   assert.match(chat, /\.on\('broadcast', \{ event: 'refresh' \}/)
-  assert.match(chat, /user:\$\{session\.channelToken\}/)
+  assert.match(chat, /user:\$\{realtimeChannelToken\}/)
+  assert.doesNotMatch(chat, /api\/realtime\/session/)
 })
 
 test('message timeline fetches only new rows after the latest timestamp', async () => {
@@ -29,7 +34,8 @@ test('message timeline fetches only new rows after the latest timestamp', async 
   assert.match(chat, /refreshNewMessages/)
   assert.match(chat, /30000/)
   assert.match(api, /req\.query\?\.after/)
-  assert.match(api, /query\.gt\('created_at', after\)/)
+  assert.match(api, /created_at\.gt\.\$\{afterCreatedAt\}/)
+  assert.match(api, /id\.gt\.\$\{afterId\}/)
   assert.match(api, /limit\(after \? 100 : 200\)/)
 })
 

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { randomUUID, createHash } from 'node:crypto'
+import { randomUUID, createHash, createHmac } from 'node:crypto'
 
 export function getDb() {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
@@ -30,6 +30,15 @@ export function issueToken(user) {
   return jwt.sign({ sub: user.id, username: user.username, ver: Number(user.token_version || 0), jti: randomUUID() }, getJwtSecret(), {
     expiresIn: process.env.TOKEN_TTL || '7d', issuer: 'newgen-chat', algorithm: 'HS256'
   })
+}
+
+/** Derive an opaque per-session realtime topic without exposing a database credential. */
+export function createRealtimeChannelToken(token) {
+  if (!token?.jti) throw new Error('A unique session id is required for realtime')
+  return createHmac('sha256', getJwtSecret())
+    .update('newgen-chat:realtime:')
+    .update(String(token.jti))
+    .digest('hex')
 }
 export function readBearer(req) {
   const header = req.headers.authorization || ''

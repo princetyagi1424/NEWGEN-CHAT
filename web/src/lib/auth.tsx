@@ -15,6 +15,7 @@ export interface AppProfile {
 interface AuthState {
   user: AppUser | null
   profile: AppProfile | null
+  realtimeChannelToken: string | null
   loading: boolean
   configured: boolean
   signUp: (username: string, password: string, securityAnswer: string) => Promise<{ error: string | null }>
@@ -49,6 +50,7 @@ function readSavedUser(): AppUser | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
   const [profile, setProfile] = useState<AppProfile | null>(null)
+  const [realtimeChannelToken, setRealtimeChannelToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const configured = true
 
@@ -67,12 +69,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!response.ok) throw new Error('Session expired')
         const data = await response.json()
         setUser(data.user)
+        setProfile(data.profile || null)
+        setRealtimeChannelToken(typeof data.realtimeChannelToken === 'string' ? data.realtimeChannelToken : null)
         sessionStorage.setItem(USER_KEY, JSON.stringify(data.user))
       })
       .catch(() => {
         sessionStorage.removeItem(TOKEN_KEY)
         sessionStorage.removeItem(USER_KEY)
         setUser(null)
+        setProfile(null)
+        setRealtimeChannelToken(null)
       })
       .finally(() => setLoading(false))
   }, [])
@@ -86,6 +92,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem(TOKEN_KEY, data.token)
       sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
       setUser(nextUser)
+      setProfile(null)
+      setRealtimeChannelToken(null)
       // Register this browser's device identity locally; server-side device-key
       // registration will be connected with the account security workflow.
       // Device-key provisioning is local and optional; do not hold up sign-in.
@@ -103,6 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem(TOKEN_KEY, data.token)
       sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
       setUser(nextUser)
+      setProfile(null)
+      setRealtimeChannelToken(null)
       // Device-key provisioning is local and optional; do not hold up sign-in.
       void getOrCreateDeviceIdentity().catch(() => undefined)
       return { error: null }
@@ -126,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await clearLocalData().catch(() => undefined)
     setUser(null)
     setProfile(null)
+    setRealtimeChannelToken(null)
   }, [])
   const signOutAll = useCallback(async () => {
     const token = sessionStorage.getItem(TOKEN_KEY)
@@ -147,11 +158,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await clearLocalData().catch(() => undefined)
       setUser(null)
       setProfile(null)
+      setRealtimeChannelToken(null)
     }
   }, [])
   const refreshProfile = useCallback(async () => {
     const token = sessionStorage.getItem(TOKEN_KEY)
-    if (!token) { setProfile(null); return }
+    if (!token) { setProfile(null); setRealtimeChannelToken(null); return }
     try {
       const response = await fetch(`${API_URL}/api/me`, {
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
@@ -159,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data.error || 'Could not load profile')
+      setRealtimeChannelToken(typeof data.realtimeChannelToken === 'string' ? data.realtimeChannelToken : null)
       setProfile(data.profile || {
         id: user?.id || data.user?.id || '',
         username: user?.username || data.user?.username || '',
@@ -171,10 +184,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.id, user?.username])
   useEffect(() => {
-    if (!user) { setProfile(null); return }
-    void refreshProfile()
-  }, [user?.id, refreshProfile])
-  const value = useMemo(() => ({ user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile }), [user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile])
+    if (!user) { setProfile(null); setRealtimeChannelToken(null); return }
+    if (profile?.id !== user.id || !realtimeChannelToken) void refreshProfile()
+  }, [user?.id, profile?.id, realtimeChannelToken, refreshProfile])
+  const value = useMemo(() => ({ user, profile, realtimeChannelToken, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile }), [user, profile, realtimeChannelToken, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
