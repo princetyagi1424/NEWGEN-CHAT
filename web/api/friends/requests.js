@@ -79,7 +79,7 @@ export default async function handler(req, res) {
 
     return sendError(res, 405, 'Method not allowed')
   } catch (error) {
-    console.error('Friend requests API error:', error.message)
+    console.error('Friend requests API error:', error?.code || error?.name || 'friend_request_failed')
     return sendError(res, 500, 'Could not process connection request')
   }
 }
