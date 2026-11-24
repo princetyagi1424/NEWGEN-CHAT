@@ -112,3 +112,24 @@ test('Web-issued JWTs have server-side revocation and authenticated routes enfor
     assert.match(source, /isTokenRevoked/, file);
   }
 });
+
+test('Web login, registration, and password recovery use atomic account plus network rate limits', () => {
+  const helper = fs.readFileSync(path.join(repo, 'web/api/_lib/auth.js'), 'utf8');
+  const login = fs.readFileSync(path.join(repo, 'web/api/auth/login.js'), 'utf8');
+  const register = fs.readFileSync(path.join(repo, 'web/api/auth/register.js'), 'utf8');
+  const recover = fs.readFileSync(path.join(repo, 'web/api/auth/recover.js'), 'utf8');
+  const baseSchema = fs.readFileSync(path.join(repo, 'web/database/schema.sql'), 'utf8');
+  const migration = fs.readFileSync(path.join(repo, 'web/database/migrations/008_atomic_web_auth_rate_limit.sql'), 'utf8');
+  assert.match(helper, /export async function consumeAuthAttempt/);
+  assert.match(helper, /hashAuthAttemptIdentity/);
+  assert.match(helper, /createHash\('sha256'\)/);
+  assert.match(login, /consumeAuthAttempt\(db, req, input\.username, 10\)/);
+  assert.match(register, /consumeAuthAttempt\(db, req, input\.username, 5\)/);
+  assert.match(recover, /consumeAuthAttempt\(db, req, input\.username, 5\)/);
+  assert.match(baseSchema, /CREATE TABLE IF NOT EXISTS public\.account_auth_attempts/);
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /ip_hash = p_ip_hash/);
+  assert.match(migration, /account_hash = p_account_hash/);
+  assert.match(migration, /GRANT EXECUTE ON FUNCTION[\s\S]*TO service_role/);
+  assert.doesNotMatch(recover, /newgen-recovery-throttle/);
+});
