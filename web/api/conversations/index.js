@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     }
     return sendError(res, 405, 'Method not allowed')
   } catch (error) {
-    console.error('Conversations API error:', error.message)
+    console.error('Conversations API error:', error?.code || error?.name || 'conversation_request_failed')
     return sendError(res, 500, 'Could not load conversations')
   }
 }
