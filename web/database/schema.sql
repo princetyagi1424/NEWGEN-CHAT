@@ -55,3 +55,17 @@ CREATE INDEX IF NOT EXISTS revoked_tokens_expires_idx ON public.revoked_tokens (
 CREATE INDEX IF NOT EXISTS revoked_tokens_user_idx ON public.revoked_tokens (user_id);
 ALTER TABLE public.revoked_tokens ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.revoked_tokens FROM anon, authenticated;
+
+-- Atomic account and network rate limits for Vercel login, registration and recovery.
+CREATE TABLE IF NOT EXISTS public.account_auth_attempts (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  ip_hash TEXT NOT NULL,
+  account_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS account_auth_attempts_ip_created_idx
+  ON public.account_auth_attempts (ip_hash, created_at DESC);
+CREATE INDEX IF NOT EXISTS account_auth_attempts_account_created_idx
+  ON public.account_auth_attempts (account_hash, created_at DESC);
+ALTER TABLE public.account_auth_attempts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.account_auth_attempts FROM anon, authenticated;
