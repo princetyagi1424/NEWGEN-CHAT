@@ -109,7 +109,9 @@ export default async function handler(req, res) {
       }
       // A successful verification clears consecutive failures for this account.
       await resetAttempts(db, user.id)
-      if (action === 'verify') return res.status(200).json({ status: 'verified' })
+      if (action === 'verify') {
+        return res.status(200).json({ status: 'verified' })
+      }
 
       // Only members of the conversation may receive its key.
       const { data: membership, error: membershipError } = await db.from('conversation_members')
