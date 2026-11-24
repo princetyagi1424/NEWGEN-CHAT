@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     if (error) throw error
     return res.status(200).json({ users: users || [] })
   } catch (error) {
-    console.error('User search API error:', error.message)
+    console.error('User search API error:', error?.code || error?.name || 'user_search_failed')
     return sendError(res, 500, 'User search is temporarily unavailable')
   }
 }
