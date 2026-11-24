@@ -1,6 +1,6 @@
 # NEWGEN CHAT — Master execution status
 
-Updated: 2026-11-23  
+Updated: 2026-11-24  
 Repository: `princetyagi1424/NEWGEN-CHAT`  
 Working branch: `fix/web-device-key-persistence`
 
@@ -26,14 +26,16 @@ The `main` branch has not been force-updated. Merge only the latest branch head 
 10. Backend and Web API error logs were changed to avoid printing raw exception messages.
 11. CI explicitly runs Web TypeScript validation, Web production build, backend tests and Android debug APK build.
 12. Regression tests and the security, implementation, deployment and blocker documentation have been updated.
-## Latest CI snapshot
+## Latest verified CI snapshot
 
-Workflow: [run 45238767834](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45238767834)
+Workflow: [run 45328133034](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45328133034)  
+Validated commit: `ee4cab47d3230672e08252d3b53747ac38b06598`
 
-- Backend tests: 67 passed, 0 failed.
-- Web TypeScript validation: passed.
-- Web production build: passed.
-- Android debug APK build: running when this file was updated; completion must be verified before merge.
+- Backend: 77 tests passed, 0 failed; backend dependency audit passed.
+- Web: npm audit passed with 0 vulnerabilities reported; TypeScript validation and production build passed.
+- Android: debug APK assembled and artifact upload passed.
+
+This is CI evidence only—not live Supabase, Firebase, two-device, call or production E2EE validation.
 
 ## Remaining acceptance gaps
 
@@ -62,14 +64,17 @@ Workflow: [run 45238767834](https://github.com/princetyagi1424/NEWGEN-CHAT/actio
 
 ## Required Supabase migrations
 
-For an existing project, first ensure the base app schema and PIN table/column are present. Then apply any missing migrations:
+For a new Web project, follow the ordered setup in `web/README.md`: base Supabase schema, custom `app_users` schema, profile bridge, PIN schema, then security migrations 004–009. For an existing project, inspect which have already been applied and run only missing migrations in dependency order:
 
-1. `web/database/migrations/2026-11-23-chat-unlock-pin.sql` (only if the PIN schema is not already present).
-2. `web/database/migrations/004_membership_rls_hardening.sql`.
-3. `web/database/migrations/005_atomic_chat_pin_rate_limit.sql`.
-4. `web/database/migrations/006_server_only_conversation_writes.sql`.
+1. `web/database/migrations/2026-11-23-chat-unlock-pin.sql` (if PIN schema is absent).
+2. `004_membership_rls_hardening.sql`.
+3. `005_atomic_chat_pin_rate_limit.sql`.
+4. `006_server_only_conversation_writes.sql`.
+5. `007_web_session_revocation.sql`.
+6. `008_atomic_web_auth_rate_limit.sql`.
+7. `009_profile_and_receipt_rls_hardening.sql`.
 
-Apply them in the Supabase SQL Editor and verify both server-side success and browser-role denial. Do not paste service-role keys into chat or commit them.
+Apply them in Supabase SQL Editor and verify server-role success plus anon/authenticated denial. A committed migration is not proof of a hosted database change. Do not paste secrets into chat or commit them.
 
 ## Release rule
 
