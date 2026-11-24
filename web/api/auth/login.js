@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     }
     return res.status(200).json({ user: { id: user.id, username: user.username }, token: issueToken(user) })
   } catch (error) {
-    console.error('Login API error:', error.message)
+    console.error('Login API error:', error?.code || error?.name || 'login_failed')
     return sendError(res, 500, 'Login is temporarily unavailable')
   }
 }
