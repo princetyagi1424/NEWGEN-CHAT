@@ -98,3 +98,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     transition-duration: .01ms !important;
   }
 }
+
+/* Masks PIN digits without type=password, so browsers do not offer to save them as a password. */
+.pin-mask { -webkit-text-security: disc; text-security: disc; }
