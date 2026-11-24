@@ -1,6 +1,6 @@
 # NEWGEN CHAT — Security audit snapshot
 
-Date: 2026-11-23
+Date: 2026-11-24
 Audited revision: `cf19c0cb72391bab82dbe9c8bfdab8ad40238ab4`
 Audit branch: `fix/web-device-key-persistence`
 
