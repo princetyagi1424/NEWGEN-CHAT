@@ -18,7 +18,7 @@ async function authenticate(req, db) {
   const token = readBearer(req)
   if (!token?.sub) return null
   const { data, error } = await db.from('app_users')
-    .select('id,username,token_version,security_question,security_answer_hash,chat_unlock_pin_hash')
+    .select('id,username,token_version,password_hash,security_question,security_answer_hash,chat_unlock_pin_hash')
     .eq('id', token.sub).maybeSingle()
   if (error) throw error
   if (!data || Number(data.token_version) !== Number(token.ver || 0) || await isTokenRevoked(db, token)) return null
@@ -76,15 +76,19 @@ export default async function handler(req, res) {
     if (action === 'set' || action === 'change') {
       const pin = req.body?.pin
       const answer = normalizeAnswer(req.body?.securityAnswer)
+      const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : ''
       if (!validPin(pin)) return sendError(res, 400, 'PIN must contain 4–12 digits.')
-      if (answer.length < 2 || answer.length > 100) {
-        return sendError(res, 400, 'Enter your security answer.')
+      if ((!answer || answer.length > 100) && !currentPassword) {
+        return sendError(res, 400, 'Enter your security answer or current account password.')
       }
+      if (answer && answer.length < 2) return sendError(res, 400, 'Security answer must contain at least 2 characters.')
       if (!(await consumeAttempt(db, user.id, ipHash))) {
         return sendError(res, 429, 'Too many security attempts. Try again in 15 minutes.')
       }
-      if (!user.security_answer_hash || !(await bcrypt.compare(answer, user.security_answer_hash))) {
-        return sendError(res, 401, 'Incorrect security answer.')
+      const answerMatches = Boolean(answer && user.security_answer_hash && await bcrypt.compare(answer, user.security_answer_hash))
+      const passwordMatches = Boolean(currentPassword && user.password_hash && await bcrypt.compare(currentPassword, user.password_hash))
+      if (!answerMatches && !passwordMatches) {
+        return sendError(res, 401, 'Security answer or current account password is incorrect.')
       }
       const hash = await bcrypt.hash(pin, 12)
       const { error } = await db.from('app_users').update({ chat_unlock_pin_hash: hash }).eq('id', user.id)
