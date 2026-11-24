@@ -35,6 +35,7 @@ For an existing project, apply only the migrations that have not already been ap
 2. `web/database/migrations/004_membership_rls_hardening.sql` — prevents browser self-joining and self-promoting in conversations and removes recursive membership visibility.
 3. `web/database/migrations/005_atomic_chat_pin_rate_limit.sql` — installs the atomic, account-wide 8-attempt / 15-minute PIN and security-answer limiter. Apply after the PIN-attempt table exists.
 4. `web/database/migrations/006_server_only_conversation_writes.sql` — makes conversation and message writes go through authenticated server APIs rather than direct browser table writes.
+5. `web/database/migrations/007_web_session_revocation.sql` — adds per-JWT session revocation storage; required before the updated Web APIs will accept authenticated requests.
 
 The migrations are committed source files; they are **not** applied to a hosted Supabase project automatically. After applying them, verify that the service-role API can perform expected writes and anon/authenticated browser roles cannot bypass the API.
 
