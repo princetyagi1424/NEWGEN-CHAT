@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = sessionStorage.getItem(TOKEN_KEY)
     if (token) {
       // Best-effort server revocation; local sign-out must still complete offline.
-      void fetch(`${API_URL}/api/auth/logout`, {
+      await fetch(`${API_URL}/api/auth/logout`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         keepalive: true,
