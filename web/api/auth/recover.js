@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     if (updateError) throw updateError
     return res.status(200).json({ status: 'password_reset', message: 'Password reset. Sign in with your new password.' })
   } catch (error) {
-    console.error('Account recovery API error:', error.message)
+    console.error('Account recovery API error:', error?.code || error?.name || 'recovery_failed')
     return sendError(res, 500, 'Account recovery is temporarily unavailable')
   }
 }
