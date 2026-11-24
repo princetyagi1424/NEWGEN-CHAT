@@ -42,3 +42,16 @@ CREATE INDEX IF NOT EXISTS chat_pin_attempts_user_ip_created_idx
   ON public.chat_pin_attempts (user_id, ip_hash, created_at DESC);
 ALTER TABLE public.chat_pin_attempts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.chat_pin_attempts FROM anon, authenticated;
+
+
+-- One-time JWT session revocation for the custom Vercel username/password API.
+CREATE TABLE IF NOT EXISTS public.revoked_tokens (
+  jti UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.app_users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS revoked_tokens_expires_idx ON public.revoked_tokens (expires_at);
+CREATE INDEX IF NOT EXISTS revoked_tokens_user_idx ON public.revoked_tokens (user_id);
+ALTER TABLE public.revoked_tokens ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.revoked_tokens FROM anon, authenticated;
