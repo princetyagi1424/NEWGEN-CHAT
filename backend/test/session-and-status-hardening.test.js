@@ -63,7 +63,7 @@ test('Android and Web sign-out call the server-side session revocation endpoint'
 });
 
 test('password recovery revokes sessions, push routes and online presence atomically', () => {
-  const start = server.indexOf("app.post('/api/auth/recover-password'");
+  const start = server.indexOf("app.post('/api/account/recover-password'");
   const end = server.indexOf("const mediaSchema=z.object(", start);
   assert.ok(start >= 0 && end > start);
   const route = server.slice(start, end);
