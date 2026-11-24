@@ -18,6 +18,7 @@ type ConvWithMeta = Conversation & {
 }
 type VisibleMessage = Message & { plaintext?: string; locked?: boolean; decryptError?: boolean }
 type ConnectionRequest = { id: string; other_user_id: string; other_username: string; direction: 'incoming' | 'outgoing'; status: string }
+type SearchProfile = Profile & { is_friend?: boolean }
 
 export default function ChatApp() {
   const { user, profile, signOut, signOutAll, realtimeChannelToken } = useAuth()
@@ -26,7 +27,7 @@ export default function ChatApp() {
   const [messages, setMessages] = useState<VisibleMessage[]>([])
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
-  const [searchResults, setSearchResults] = useState<Profile[]>([])
+  const [searchResults, setSearchResults] = useState<SearchProfile[]>([])
   const [requests, setRequests] = useState<ConnectionRequest[]>([])
   const [sending, setSending] = useState(false)
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
@@ -50,7 +51,8 @@ export default function ChatApp() {
   activeIdRef.current = activeId
   const activeConv = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
   const isUnlocked = Boolean(passkey && activeId)
-  const visibleConversations = conversations.filter(c => Boolean(c.lastMessage))
+  // Keep newly-created/empty conversations visible; they are valid chat rooms.
+  const visibleConversations = conversations
 
   const apiRequest = useCallback(async (path: string, options: RequestInit = {}) => {
     const token = getAuthToken()
@@ -236,10 +238,10 @@ export default function ChatApp() {
         })
         const result = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(result.error || 'Could not search users')
-        if (!cancelled) setSearchResults((result.users ?? []).map((p: { id: string; username: string }) => ({
+        if (!cancelled) setSearchResults((result.users ?? []).map((p: { id: string; username: string; is_friend?: boolean }) => ({
           id: p.id, username: p.username, display_name: p.username, avatar_url: null, bio: null,
-          created_at: '', updated_at: '', last_seen_at: null,
-        })) as Profile[])
+          created_at: '', updated_at: '', last_seen_at: null, is_friend: p.is_friend === true,
+        })) as SearchProfile[])
       } catch (error) {
         if (!cancelled && !(error instanceof DOMException && error.name === 'AbortError')) {
           console.error('User search failed:', error)
@@ -474,9 +476,9 @@ export default function ChatApp() {
             {search.trim().length >= 2 && (
               <div className="mt-2 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl">
                 {searchResults.length ? searchResults.map(p => (
-                  <button key={p.id} type="button" onClick={() => void sendConnectionRequest(p)} disabled={creatingChat} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-emerald-50 disabled:opacity-50">
+                  <button key={p.id} type="button" onClick={() => p.is_friend ? void startDirectChat(p) : void sendConnectionRequest(p)} disabled={creatingChat} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-emerald-50 disabled:opacity-50">
                     <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-emerald-500 to-pink-500 text-sm font-bold text-white">{p.username.slice(0,1).toUpperCase()}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{p.username}</span><span className="text-xs text-slate-400">Send connection request</span></span><Plus className="h-4 w-4 text-emerald-600"/>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{p.username}</span><span className="text-xs text-slate-400">{p.is_friend ? 'Open private chat' : 'Send connection request'}</span></span><Plus className="h-4 w-4 text-emerald-600"/>
                   </button>
                 )) : <p className="p-4 text-xs text-slate-400">No matching users found.</p>}
               </div>
