@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     }
     return res.status(201).json({ conversation, otherUser: other, existing: false })
   } catch (error) {
-    console.error('Direct chat API error:', error.message)
+    console.error('Direct chat API error:', error?.code || error?.name || 'direct_chat_failed')
     return sendError(res, 500, 'Could not start conversation')
   }
 }
