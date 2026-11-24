@@ -14,16 +14,18 @@ The `main` branch has not been force-updated. Merge only the latest branch head 
 
 ## Implemented in this execution branch
 
-1. Web ECDH device identity creation now works with a non-extractable IndexedDB private key; temporary private-key bytes are wiped after import.
-2. Supabase conversation membership is server-write-only. Browser users can read only their own membership row; recursive membership RLS was removed.
-3. Supabase conversation/message mutations are server-write-only so clients cannot bypass API validation and membership checks.
-4. Chat PIN verification now returns a real success response. PIN and security-answer attempts are atomically rate-limited account-wide across devices/IPs.
-5. Group ownership can be transferred only by the current owner; an owner or another admin cannot be removed by a non-owner.
-6. UI controls for not-yet-implemented Web calling, attachments and More options are disabled instead of presenting dead clickable actions.
-7. JWT sessions now support one-device logout via jti revocation and all-device logout via token-version rotation. Password recovery and logout-all remove push registrations and mark presence offline. Android explicit logout/account deletion clears local passkey/media storage.
-8. CI explicitly runs Web TypeScript validation before the production build; backend uses its lockfile-based clean install. Web dependency install uses `npm install` because this repository does not include a Web package lockfile.
-8. Regression tests and security/external-blocker documentation have been added or updated.
-
+1. Web ECDH device identity creation stores a non-extractable IndexedDB private key; transient private-key bytes are zeroed after import.
+2. Supabase membership writes are server-only; browser membership reads are self-only and avoid recursive RLS.
+3. Conversation and message writes go through authenticated server APIs; profile enumeration and browser receipt writes are blocked by RLS migrations.
+4. Chat PIN success response is repaired; PIN and security-answer attempts are atomically rate-limited account-wide across devices/IPs.
+5. Group ownership transfer is owner-only; a non-owner cannot remove the owner or another admin.
+6. Nonfunctional Web call, attachment and More options actions are disabled rather than appearing clickable.
+7. Node and Web JWTs support server-side revocation. Normal logout revokes the current token; logout-all uses token-version rotation. Password recovery clears old push registrations and presence.
+8. Android explicit logout/account deletion clears local session, passkeys and decrypted private media without erasing keys on transient network restore failures.
+9. Web login, registration and recovery have atomic account/network rate limits using salted hashes, not raw IP addresses/usernames.
+10. Backend and Web API error logs were changed to avoid printing raw exception messages.
+11. CI explicitly runs Web TypeScript validation, Web production build, backend tests and Android debug APK build.
+12. Regression tests and the security, implementation, deployment and blocker documentation have been updated.
 ## Latest CI snapshot
 
 Workflow: [run 45238767834](https://github.com/princetyagi1424/NEWGEN-CHAT/actions/runs/45238767834)
