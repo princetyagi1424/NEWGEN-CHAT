@@ -27,14 +27,18 @@ Never put `SUPABASE_SERVICE_ROLE_KEY` or `JWT_SECRET` in `.env.local` variables 
 
 ## Database setup and migrations
 
-For a new project, run `web/database/schema.sql` in the Supabase SQL Editor. It creates the custom username/password `app_users` tables and supporting recovery/PIN-attempt tables. Do not confuse this custom account system with Supabase Auth.
+For a new project, run these SQL files in the Supabase SQL Editor in this order:
 
-For an existing project, apply only the migrations that have not already been applied. In particular:
+1. `web/supabase/migrations/001_initial_schema.sql` — creates the profile, conversation, membership, message and related tables.
+2. `web/database/schema.sql` — creates the custom username/password `app_users` account and security tables.
+3. `web/database/chat-auth-bridge.sql` — changes the profile foreign key from Supabase Auth users to the custom `app_users` table and backfills matching profile rows. This is required because the app does not create Supabase Auth users.
+4. `web/database/migrations/2026-11-23-chat-unlock-pin.sql` — adds PIN columns/table for existing projects (safe to run even when already created by the base schema).
+5. `web/database/migrations/004_membership_rls_hardening.sql` — prevents browser self-joining and self-promoting in conversations and removes recursive membership visibility.
+6. `web/database/migrations/005_atomic_chat_pin_rate_limit.sql` — installs the atomic, account-wide 8-attempt / 15-minute PIN and security-answer limiter.
+7. `web/database/migrations/006_server_only_conversation_writes.sql` — makes conversation and message writes go through authenticated server APIs rather than direct browser table writes.
+8. `web/database/migrations/007_web_session_revocation.sql` — creates the service-only table used to revoke individual Web JWT sessions.
 
-1. `web/database/migrations/2026-11-23-chat-unlock-pin.sql` — adds the PIN hash and attempt table when not already present.
-2. `web/database/migrations/004_membership_rls_hardening.sql` — prevents browser self-joining and self-promoting in conversations and removes recursive membership visibility.
-3. `web/database/migrations/005_atomic_chat_pin_rate_limit.sql` — installs the atomic, account-wide 8-attempt / 15-minute PIN and security-answer limiter. Apply after the PIN-attempt table exists.
-4. `web/database/migrations/006_server_only_conversation_writes.sql` — makes conversation and message writes go through authenticated server APIs rather than direct browser table writes.
+For an existing project, inspect which schema/migrations have already been applied and run only missing steps in dependency order. In particular, `chat-auth-bridge.sql` must be applied before custom-account registration, and migration `007` must be applied before deploying the updated Web APIs because authenticated requests now fail closed when the revocation table is unavailable.
 5. `web/database/migrations/007_web_session_revocation.sql` — adds per-JWT session revocation storage; required before the updated Web APIs will accept authenticated requests.
 
 The migrations are committed source files; they are **not** applied to a hosted Supabase project automatically. After applying them, verify that the service-role API can perform expected writes and anon/authenticated browser roles cannot bypass the API.
