@@ -46,3 +46,23 @@ export async function decryptWithPasskey(passphrase: string, ciphertext: string,
 export async function decryptWithPasskeyToString(passphrase: string, ciphertext: string, iv: string) {
   return decoder.decode(await decryptWithPasskey(passphrase, ciphertext, iv))
 }
+
+/** Direct AES-256-GCM with a server-released conversation key (base64). The 12-byte
+ * nonce marks the new format; legacy passphrase messages use a 28-byte salt+nonce. */
+async function importConversationKey(keyB64: string): Promise<CryptoKey> {
+  const raw = fromB64(keyB64)
+  if (raw.length !== 32) throw new Error('Invalid conversation key.')
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
+}
+export async function encryptWithConversationKey(keyB64: string, plaintext: string) {
+  const key = await importConversationKey(keyB64)
+  const nonce = crypto.getRandomValues(new Uint8Array(12))
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, encoder.encode(plaintext)))
+  return { ciphertext: toB64(ciphertext), iv: toB64(nonce) }
+}
+export async function decryptWithConversationKey(keyB64: string, ciphertext: string, iv: string) {
+  const nonce = fromB64(iv)
+  if (nonce.length !== 12) throw new Error('Legacy message format.')
+  const key = await importConversationKey(keyB64)
+  return decoder.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, key, fromB64(ciphertext)))
+}

@@ -1,7 +1,17 @@
-import { createHash } from 'node:crypto'
+import { createHash, hkdfSync } from 'node:crypto'
 import { getDb, readBearer, sendError, bcrypt, isTokenRevoked } from '../_lib/auth.js'
 
 const normalizeAnswer = value => typeof value === 'string' ? value.normalize('NFKC').trim().toLowerCase() : ''
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Per-conversation AES-256 key derived from a server secret. It is released only after
+ * the caller proves their personal PIN and conversation membership, so users never type a key.
+ * Trade-off: the server can derive it, so this is not end-to-end encryption. */
+function deriveConversationKey(conversationId) {
+  const secret = process.env.CHAT_KEY_SECRET || process.env.JWT_SECRET
+  if (!secret || secret.length < 32) throw new Error('CHAT_KEY_SECRET or JWT_SECRET must contain at least 32 characters')
+  return Buffer.from(hkdfSync('sha256', secret, 'newgen-chat-conversation-key-v1', conversationId.toLowerCase(), 32)).toString('base64')
+}
 const validPin = value => typeof value === 'string' && /^[0-9]{4,12}$/.test(value)
 
 async function authenticate(req, db) {
@@ -83,9 +93,14 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'pin_updated' })
     }
 
-    if (action === 'verify') {
+    if (action === 'verify' || action === 'unlock') {
       const pin = req.body?.pin
       if (!validPin(pin)) return sendError(res, 400, 'Enter your 4–12 digit PIN.')
+      let conversationId = ''
+      if (action === 'unlock') {
+        conversationId = typeof req.body?.conversationId === 'string' ? req.body.conversationId : ''
+        if (!UUID_RE.test(conversationId)) return sendError(res, 400, 'Invalid conversation.')
+      }
       if (!(await consumeAttempt(db, user.id, ipHash))) {
         return sendError(res, 429, 'Too many PIN attempts. Try again in 15 minutes.')
       }
@@ -94,7 +109,14 @@ export default async function handler(req, res) {
       }
       // A successful verification clears consecutive failures for this account.
       await resetAttempts(db, user.id)
-      return res.status(200).json({ status: 'verified' })
+      if (action === 'verify') return res.status(200).json({ status: 'verified' })
+
+      // Only members of the conversation may receive its key.
+      const { data: membership, error: membershipError } = await db.from('conversation_members')
+        .select('conversation_id').eq('conversation_id', conversationId).eq('user_id', user.id).maybeSingle()
+      if (membershipError) throw membershipError
+      if (!membership) return sendError(res, 403, 'You are not a member of this conversation')
+      return res.status(200).json({ status: 'unlocked', key: deriveConversationKey(conversationId) })
     }
 
     return sendError(res, 400, 'Unsupported action.')

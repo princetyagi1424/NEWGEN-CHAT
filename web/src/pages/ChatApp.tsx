@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { getAuthToken, useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import { encryptWithPasskey, decryptWithPasskeyToString } from '../crypto/passkey'
+import { encryptWithConversationKey, decryptWithConversationKey } from '../crypto/passkey'
 import type { Conversation, Message, Profile } from '../types/database'
 
 type ConvWithMeta = Conversation & {
@@ -29,7 +29,6 @@ export default function ChatApp() {
   const [sending, setSending] = useState(false)
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
   const [passkey, setPasskey] = useState<string | null>(null)
-  const [passkeyEntry, setPasskeyEntry] = useState('')
   const [personalPinEntry, setPersonalPinEntry] = useState('')
   const [passkeyError, setPasskeyError] = useState('')
   const [showPasskeyDialog, setShowPasskeyDialog] = useState(false)
@@ -42,7 +41,6 @@ export default function ChatApp() {
   const [creatingChat, setCreatingChat] = useState(false)
   const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests'>('chats')
   const bottomRef = useRef<HTMLDivElement>(null)
-  const keyCacheRef = useRef<Map<string, string>>(new Map())
   const activeConv = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
   const isUnlocked = Boolean(passkey && activeId)
   const visibleConversations = conversations.filter(c => Boolean(c.lastMessage))
@@ -62,7 +60,6 @@ export default function ChatApp() {
 
   const lockChat = useCallback(() => {
     setPasskey(null)
-    setPasskeyEntry('')
     setPersonalPinEntry('')
     setPasskeyError('')
     setMessages(previous => previous.map(m => ({ ...m, plaintext: undefined, locked: true })))
@@ -110,7 +107,7 @@ export default function ChatApp() {
             rows.push({ ...message, plaintext: undefined, locked: true })
           } else {
             try {
-              rows.push({ ...message, plaintext: await decryptWithPasskeyToString(passkey, message.ciphertext, message.iv), locked: false })
+              rows.push({ ...message, plaintext: await decryptWithConversationKey(passkey, message.ciphertext, message.iv), locked: false })
             } catch {
               rows.push({ ...message, plaintext: undefined, locked: true, decryptError: true })
             }
@@ -267,25 +264,18 @@ export default function ChatApp() {
       setPasskeyError('Enter your personal 4–12 digit PIN.')
       return
     }
-    const cachedKey = keyCacheRef.current.get(activeId)
-    const keyToUse = cachedKey || passkeyEntry
-    if (!keyToUse || keyToUse.length < 12) {
-      setPasskeyError('First unlock on this device needs the conversation encryption passphrase once. Your personal PIN will be used for future unlocks in this session.')
-      return
-    }
     try {
-      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'verify', pin: personalPinEntry }) })
-      const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
-      const rows = result.messages ?? []
-      if (rows.length) await decryptWithPasskeyToString(keyToUse, rows[0].ciphertext, rows[0].iv)
-      keyCacheRef.current.set(activeId, keyToUse)
-      setPasskey(keyToUse)
-      setPasskeyEntry('')
+      const result = await apiRequest('/api/auth/chat-pin', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'unlock', pin: personalPinEntry, conversationId: activeId }),
+      })
+      if (typeof result.key !== 'string') throw new Error('Could not unlock this chat.')
+      setPasskey(result.key)
       setPersonalPinEntry('')
       setPasskeyError('')
       setShowPasskeyDialog(false)
     } catch (error) {
-      setPasskeyError(error instanceof Error ? error.message : 'Incorrect PIN or conversation passphrase.')
+      setPasskeyError(error instanceof Error ? error.message : 'Incorrect PIN.')
     }
   }
 
@@ -293,7 +283,7 @@ export default function ChatApp() {
     if (!input.trim() || !activeId || !user || !passkey || sending) return
     setSending(true)
     try {
-      const encrypted = await encryptWithPasskey(passkey, input.trim())
+      const encrypted = await encryptWithConversationKey(passkey, input.trim())
       await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`, {
         method: 'POST', body: JSON.stringify(encrypted),
       })
@@ -301,7 +291,7 @@ export default function ChatApp() {
       const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
       const visible: VisibleMessage[] = []
       for (const m of result.messages ?? []) {
-        try { visible.push({ ...m, plaintext: await decryptWithPasskeyToString(passkey, m.ciphertext, m.iv), locked: false }) }
+        try { visible.push({ ...m, plaintext: await decryptWithConversationKey(passkey, m.ciphertext, m.iv), locked: false }) }
         catch { visible.push({ ...m, locked: true, decryptError: true }) }
       }
       setMessages(visible)
@@ -320,7 +310,6 @@ export default function ChatApp() {
   function openConversation(id: string) {
     lockChat()
     setActiveId(id)
-    setPasskeyEntry('')
     setPasskeyError('')
     setShowPasskeyDialog(false)
   }
@@ -471,9 +460,8 @@ export default function ChatApp() {
                     {showPasskeyDialog ? <form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mx-auto max-w-lg space-y-2">
                       <p className="text-center text-sm font-extrabold text-slate-800">Unlock original messages</p>
                       <input type="password" inputMode="numeric" autoComplete="off" value={personalPinEntry} onChange={e=>setPersonalPinEntry(e.target.value.replace(/\D/g,''))} placeholder="Your personal PIN (4–12 digits)" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-violet-300"/>
-                      {!keyCacheRef.current.has(activeId!) && <input type="password" autoComplete="off" value={passkeyEntry} onChange={e=>setPasskeyEntry(e.target.value)} placeholder="Conversation key (first unlock on this device)" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-violet-300"/>}
                       {passkeyError&&<p role="alert" className="text-xs text-rose-600">{passkeyError}</p>}
-                      <div className="flex gap-2"><button type="button" onClick={()=>{setShowPasskeyDialog(false);setPersonalPinEntry('');setPasskeyEntry('');setPasskeyError('')}} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="flex-1 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-sm font-extrabold text-white">Unlock messages</button></div>
+                      <div className="flex gap-2"><button type="button" onClick={()=>{setShowPasskeyDialog(false);setPersonalPinEntry('');setPasskeyError('')}} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="flex-1 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-sm font-extrabold text-white">Unlock messages</button></div>
                     </form> : <button type="button" onClick={()=>setShowPasskeyDialog(true)} className="mx-auto flex w-full max-w-lg items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white"><LockKeyhole className="h-4 w-4"/> Enter personal PIN to view messages</button>}
                   </div>
                 </>
@@ -481,7 +469,7 @@ export default function ChatApp() {
                 <>
                   <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
                     <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-violet-500"/> Messages decrypt only on this device</div>
-                    {messages.map(m=>{const mine=m.sender_id===user?.id;return <div key={m.id} className={`message-enter flex ${mine?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}><div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??'✦ ✦ ✦ ✦ ✦ ✦'}</span></div><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}{mine&&<ShieldCheck className="h-3 w-3"/>}</div></div></div>})}
+                    {messages.map(m=>{const mine=m.sender_id===user?.id;return <div key={m.id} className={`message-enter flex ${mine?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}><div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??(m.decryptError?'Old message (sent before PIN-only unlock) — cannot be shown':'✦ ✦ ✦ ✦ ✦ ✦')}</span></div><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}{mine&&<ShieldCheck className="h-3 w-3"/>}</div></div></div>})}
                     <div ref={bottomRef}/>
                   </div>
                   <div className="shrink-0 border-t border-slate-100 bg-white/95 px-3 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:px-7 md:py-4">
