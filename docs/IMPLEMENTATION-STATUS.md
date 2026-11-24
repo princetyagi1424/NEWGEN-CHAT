@@ -31,7 +31,7 @@ Working branch: `fix/web-device-key-persistence`
 - React/TypeScript/Vite app with username/password auth, friend requests, conversation list, direct/group conversation APIs, message timeline and local passphrase gate.
 - PIN setup/change and in-chat PIN verification endpoint with bcrypt hashes.
 - Browser device identity persistence with non-extractable private key storage in IndexedDB.
-- Web access tokens are tab-scoped in sessionStorage (still readable by same-origin JavaScript).
+- Web access tokens are tab-scoped in sessionStorage (still readable by same-origin JavaScript). New Web JWTs carry `jti`; authenticated Vercel APIs check server-side revocation, with `/api/auth/logout` and `/api/auth/logout-all` endpoints. Apply migration `007_web_session_revocation.sql` before deploying these APIs.
 - Unimplemented call, attachments and More options controls are disabled. Stories are clearly marked unavailable; publishing is not wired up.
 
 ## Security fixes in the current work branch
