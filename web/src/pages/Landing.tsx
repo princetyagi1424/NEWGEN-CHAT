@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import PwaInstallPrompt from '../components/PwaInstallPrompt'
 import { useAuth } from '../lib/auth'
 import { MessageCircle, Shield, Smartphone, Zap, Users, Download, Globe, LockKeyhole, Instagram, ArrowUpRight, Sparkles } from 'lucide-react'
 
@@ -72,6 +73,7 @@ export default function Landing() {
           </div>
         </section>
       </main>
+      <PwaInstallPrompt />
       <footer className="border-t border-violet-100 bg-white px-5 py-8 text-center text-xs font-semibold text-slate-400">NEWGEN CHAT · A private space to connect</footer>
     </div>
   )

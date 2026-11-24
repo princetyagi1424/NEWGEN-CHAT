@@ -39,10 +39,10 @@ export default function AuthPage() {
 
   const title = mode === 'signin' ? 'Welcome back' : mode === 'signup' ? 'Create your account' : 'Recover your account'
   return (
-    <div className="relative flex min-h-full items-center justify-center overflow-y-auto bg-[#f8f5ff] p-4 py-10 text-[#211a35]">
+    <div className="relative flex h-[100dvh] min-h-0 items-start justify-center overflow-y-auto bg-[#f8f5ff] p-4 py-8 text-[#211a35] sm:items-center sm:py-10">
       <div className="pointer-events-none absolute -left-28 top-0 h-80 w-80 rounded-full bg-fuchsia-200/50 blur-3xl"/>
       <div className="pointer-events-none absolute -right-24 bottom-0 h-96 w-96 rounded-full bg-violet-200/60 blur-3xl"/>
-      <div className="relative grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-white bg-white shadow-[0_32px_100px_rgba(73,42,125,.16)] md:min-h-[620px] md:grid-cols-[.9fr_1.1fr]">
+      <div className="relative grid w-full max-w-5xl shrink-0 overflow-hidden rounded-[24px] border border-white bg-white shadow-[0_24px_72px_rgba(73,42,125,.12)] sm:rounded-[32px] md:min-h-[620px] md:grid-cols-[.9fr_1.1fr]">
         <aside className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-[#30204f] via-violet-800 to-fuchsia-600 p-10 text-white md:flex">
           <div className="absolute -right-24 top-20 h-72 w-72 rounded-full border-[38px] border-white/5"/>
           <div className="relative"><Link to="/" className="inline-flex items-center gap-3 text-lg font-black tracking-tight"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/15"><MessageCircle className="h-5 w-5"/></span>NEWGEN CHAT</Link></div>

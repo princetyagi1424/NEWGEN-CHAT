@@ -125,7 +125,7 @@ export default function PwaInstallPrompt() {
 
   return (
     <>
-      <aside className="fixed inset-x-0 bottom-0 z-[100] px-3 pt-2" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }} aria-label="Install NEWGEN CHAT">
+      <aside className="w-full px-3 py-4 sm:px-5" aria-label="Install NEWGEN CHAT">
         <div className="mx-auto flex max-w-5xl flex-col gap-3 rounded-2xl border border-emerald-200/80 bg-white/95 p-3 shadow-[0_-8px_40px_rgba(15,75,55,.16)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:gap-5 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white shadow-md shadow-emerald-200"><MessageCircle className="h-5 w-5" /></span>
@@ -141,13 +141,13 @@ export default function PwaInstallPrompt() {
               {promptAvailable ? 'Install app' : appleDevice ? 'Add to Home Screen' : 'Install app'}
             </button>
           </div>
-          {status && <p className="text-xs text-emerald-800 sm:absolute sm:-top-7 sm:right-5" role="status">{status}</p>}
+          {status && <p className="w-full text-xs leading-5 text-emerald-800 sm:text-right" role="status">{status}</p>}
         </div>
       </aside>
 
       {helpOpen && (
-        <div className="fixed inset-0 z-[110] flex items-end justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:items-center" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setHelpOpen(false) }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="pwa-install-title" className="w-full max-w-md rounded-3xl border border-white/70 bg-white p-5 shadow-2xl sm:p-6">
+        <div className="newgen-dialog-backdrop z-[110] items-end sm:items-center" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setHelpOpen(false) }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="pwa-install-title" className="newgen-dialog-panel max-w-md rounded-3xl border border-white/70 bg-white p-5 shadow-2xl sm:p-6">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <span className="mb-3 grid h-11 w-11 place-items-center rounded-2xl bg-emerald-50 text-emerald-700"><Smartphone className="h-5 w-5" /></span>

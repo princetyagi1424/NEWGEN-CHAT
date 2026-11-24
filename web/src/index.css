@@ -20,7 +20,14 @@
   text-rendering: optimizeLegibility;
 }
 * { box-sizing: border-box; }
-html, body, #root { width: 100%; height: 100%; min-height: 0; margin: 0; overflow: hidden; }
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+}
 body {
   min-height: 100dvh;
   overscroll-behavior: none;
@@ -32,44 +39,106 @@ body {
 button, input, textarea { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
-  outline: 3px solid rgb(118 82 232 / 30%);
+  outline: 3px solid rgb(21 155 114 / 25%);
   outline-offset: 2px;
 }
-::selection { background: rgb(118 82 232 / 18%); color: #302052; }
+::selection { background: rgb(21 155 114 / 18%); color: #123e32; }
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d9d2e8; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #b9add4; }
+::-webkit-scrollbar-thumb { background: #d7e2dc; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #b7c9bf; }
 
-/* WhatsApp x Instagram inspired app shell */
+/* Dashboard: one stable two-column workspace with independently scrollable panes. */
 .newgen-app-shell {
+  height: 100dvh;
+  min-height: 0;
+  padding: 12px;
   background:
-    radial-gradient(ellipse at 8% 0%, rgb(22 168 121 / 9%), transparent 34%),
-    radial-gradient(ellipse at 92% 100%, rgb(62 126 112 / 8%), transparent 38%),
-    #f4f7f5;
+    radial-gradient(ellipse at 8% 0%, rgb(22 168 121 / 8%), transparent 34%),
+    radial-gradient(ellipse at 92% 100%, rgb(62 126 112 / 7%), transparent 38%),
+    #f2f6f3;
 }
 .newgen-app-frame {
-  border-color: rgb(226 235 230 / 95%);
-  box-shadow: 0 28px 90px rgb(30 56 44 / 10%);
+  height: 100%;
+  min-height: 0;
+  border: 1px solid rgb(224 234 228 / 95%);
+  border-radius: 24px;
+  box-shadow: 0 20px 65px rgb(30 56 44 / 9%);
 }
 .newgen-sidebar {
-  background: linear-gradient(180deg, #fff 0%, #fdfcff 100%);
-  border-color: #eeeaf5;
+  display: flex;
+  flex: 0 0 360px;
+  width: 360px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid #e8eeea;
+  background: #fff;
 }
-.newgen-brand-row { min-height: 82px; }
+.newgen-brand-row { min-height: 76px; flex-shrink: 0; }
+.newgen-sidebar-list {
+  min-height: 0;
+  flex: 1 1 0%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
 .newgen-chat-panel {
+  min-width: 0;
+  min-height: 0;
   background:
     radial-gradient(circle at 85% 12%, rgb(22 168 121 / 5%), transparent 26%),
     linear-gradient(145deg, #fbfdfb 0%, #f6faf7 100%);
 }
-.newgen-chat-header { border-color: #eeeaf5; }
-.newgen-tab-section button { letter-spacing: .01em; }
+.newgen-chat-header {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  border-color: #e8eeea;
+  background: rgb(255 255 255 / 96%);
+}
+.newgen-message-list {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 0%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.newgen-chat-composer {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  background: #fff;
+}
 .newgen-sidebar button, .newgen-chat-panel button {
   transition: background-color .18s ease, color .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
 }
 .newgen-sidebar button:active, .newgen-chat-panel button:active { transform: scale(.985); }
-.newgen-sidebar input, .newgen-chat-panel input {
+.newgen-sidebar input, .newgen-chat-panel input, .newgen-chat-panel textarea {
+  min-width: 0;
   transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+.newgen-dialog-backdrop {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: rgb(15 23 42 / 48%);
+  backdrop-filter: blur(8px);
+}
+.newgen-dialog-panel {
+  width: 100%;
+  max-height: calc(100dvh - 24px);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .message-enter { animation: message-in .2s cubic-bezier(.2,.8,.2,1); }
 @keyframes message-in {
@@ -83,12 +152,30 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .typing-dot { animation: typing-dot 1.2s infinite; }
 .typing-dot:nth-child(2) { animation-delay: .15s; }
 .typing-dot:nth-child(3) { animation-delay: .3s; }
+.pin-mask { -webkit-text-security: disc; text-security: disc; }
 
+@media (max-width: 1100px) {
+  .newgen-sidebar { flex-basis: 330px; width: 330px; }
+}
 @media (max-width: 767px) {
-  .newgen-app-shell { background: #fff; }
-  .newgen-app-frame { border: 0; border-radius: 0; box-shadow: none; }
-  .newgen-sidebar { border-right: 0; }
-  .newgen-brand-row { min-height: 72px; padding-top: max(1rem, env(safe-area-inset-top)); }
+  .newgen-app-shell { padding: 0; background: #fff; }
+  .newgen-app-frame {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .newgen-sidebar {
+    flex: 1 1 100%;
+    width: 100%;
+    border-right: 0;
+  }
+  .newgen-brand-row {
+    min-height: 70px;
+    padding-top: max(.75rem, env(safe-area-inset-top));
+  }
+  .newgen-chat-header { padding-left: 12px; padding-right: 12px; }
+  .newgen-message-list { scrollbar-gutter: auto; }
+  .newgen-dialog-panel { max-height: calc(100dvh - 20px); }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -98,6 +185,3 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     transition-duration: .01ms !important;
   }
 }
-
-/* Masks PIN digits without type=password, so browsers do not offer to save them as a password. */
-.pin-mask { -webkit-text-security: disc; text-security: disc; }

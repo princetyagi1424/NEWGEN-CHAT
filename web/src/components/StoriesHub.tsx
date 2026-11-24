@@ -141,7 +141,7 @@ export default function StoriesHub() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-5">
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
       <div className="mb-6 flex items-start justify-between gap-3">
         <div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-emerald-600">Your circle</p><h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Stories</h2><p className="mt-1 text-sm text-slate-400">Little moments, shared with your people.</p></div>
         <button type="button" onClick={() => { setComposerOpen(true); setError('') }} className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-xs font-extrabold text-white shadow-lg shadow-emerald-100 transition hover:-translate-y-0.5 hover:bg-emerald-700"><Plus className="h-4 w-4" /> Add story</button>
@@ -170,9 +170,9 @@ export default function StoriesHub() {
       {error && !composerOpen && <p role="alert" className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">{error}</p>}
       <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-3"><p className="flex items-center gap-2 text-[11px] font-bold text-slate-600"><ShieldCheck className="h-4 w-4 text-emerald-600" /> Shared with accepted connections only</p><p className="mt-1 text-[10px] leading-4 text-slate-400">Stories expire after 24 hours. Story content is protected by friend-only access controls, but is not end-to-end encrypted in this browser version.</p></div>
 
-      {composerOpen && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) resetComposer() }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="story-composer-title" className="w-full max-w-[470px] overflow-hidden rounded-[28px] bg-white shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5"><div><p className="text-[10px] font-extrabold uppercase tracking-[.18em] text-emerald-600">A little moment</p><h3 id="story-composer-title" className="mt-1 text-lg font-black text-slate-900">Create a story</h3></div><button type="button" onClick={resetComposer} aria-label="Close" className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>
+      {composerOpen && <div className="newgen-dialog-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) resetComposer() }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="story-composer-title" className="newgen-dialog-panel max-w-[470px] rounded-[24px] bg-white shadow-2xl">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4 sm:px-6"><div><p className="text-[10px] font-extrabold uppercase tracking-[.18em] text-emerald-600">A little moment</p><h3 id="story-composer-title" className="mt-1 text-lg font-black text-slate-900">Create a story</h3></div><button type="button" onClick={resetComposer} aria-label="Close" className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>
           <form onSubmit={publishStory} className="space-y-4 p-6">
             {imagePreview ? <div className="relative h-56 overflow-hidden rounded-2xl bg-slate-100"><img src={imagePreview} alt="Story preview" className="h-full w-full object-contain" /><button type="button" onClick={() => { setImagePreview(null); setImageDataUrl(null) }} aria-label="Remove photo" className="absolute right-3 top-3 rounded-full bg-slate-950/60 p-2 text-white"><X className="h-4 w-4" /></button></div> : <button type="button" onClick={() => pickerRef.current?.click()} className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/60 px-4 py-8 text-emerald-700 transition hover:bg-emerald-50"><ImagePlus className="h-7 w-7" /><span className="text-sm font-bold">Add a photo</span><span className="text-[10px] text-emerald-600/70">Optional · JPG, PNG or WebP</span></button>}
             <input ref={pickerRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { void chooseImage(e.target.files?.[0]); e.currentTarget.value = '' }} />
@@ -183,17 +183,26 @@ export default function StoriesHub() {
         </section>
       </div>}
 
-      {activeStory && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) setActiveIndex(null) }}>
-        <section role="dialog" aria-modal="true" aria-label="Story viewer" className="relative flex h-[min(820px,92dvh)] w-full max-w-[430px] flex-col overflow-hidden rounded-[28px] bg-slate-950 text-white shadow-2xl">
-          <div className="absolute left-0 right-0 top-0 z-10 p-4">
-            <div className="mb-4 flex gap-1">{groups.find(g => g.id === activeStory.groupId)?.stories.map((_, i) => <span key={i} className="h-1 flex-1 rounded-full bg-white/25" />)}</div>
-            <div className="flex items-center gap-3"><Avatar author={activeStory.author} size="h-10 w-10" /><div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold">{activeStory.author.display_name || activeStory.author.username}</p><p className="text-[10px] text-white/65">{formatDistanceToNow(new Date(activeStory.created_at), { addSuffix: true })}</p></div>{activeStory.user_id === user?.id && <button type="button" onClick={() => void deleteStory(activeStory)} aria-label="Delete story" className="rounded-full bg-white/15 p-2 hover:bg-white/25"><Trash2 className="h-4 w-4" /></button>}<button type="button" onClick={() => setActiveIndex(null)} aria-label="Close story" className="rounded-full bg-white/15 p-2 hover:bg-white/25"><X className="h-4 w-4" /></button></div>
+      {activeStory && <div className="newgen-dialog-backdrop z-[110] !bg-slate-950/90" onMouseDown={e => { if (e.target === e.currentTarget) setActiveIndex(null) }}>
+        <section role="dialog" aria-modal="true" aria-label="Story viewer" className="flex h-[min(820px,calc(100dvh-24px))] w-full max-w-[430px] min-h-0 flex-col overflow-hidden rounded-[24px] bg-slate-950 text-white shadow-2xl">
+          <div className="shrink-0 p-4 pb-3">
+            <div className="mb-3 flex gap-1">{groups.find(g => g.id === activeStory.groupId)?.stories.map((_, i) => <span key={i} className="h-1 flex-1 rounded-full bg-white/25" />)}</div>
+            <div className="flex items-center gap-3">
+              <Avatar author={activeStory.author} size="h-10 w-10" />
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold">{activeStory.author.display_name || activeStory.author.username}</p><p className="text-[10px] text-white/65">{formatDistanceToNow(new Date(activeStory.created_at), { addSuffix: true })}</p></div>
+              {activeStory.user_id === user?.id && <button type="button" onClick={() => void deleteStory(activeStory)} aria-label="Delete story" className="rounded-full bg-white/15 p-2 hover:bg-white/25"><Trash2 className="h-4 w-4" /></button>}
+              <button type="button" onClick={() => setActiveIndex(null)} aria-label="Close story" className="rounded-full bg-white/15 p-2 hover:bg-white/25"><X className="h-4 w-4" /></button>
+            </div>
           </div>
-          <div className="flex flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-950 via-slate-950 to-indigo-950">
-            {activeStory.media_url ? <img src={activeStory.media_url} alt="Story" className="max-h-full max-w-full object-contain" /> : <p className="max-w-[330px] px-8 text-center text-2xl font-extrabold leading-relaxed">{activeStory.caption}</p>}
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-950 via-slate-950 to-indigo-950 px-3">
+            {activeStory.media_url ? <img src={activeStory.media_url} alt="Story" className="max-h-full max-w-full object-contain" /> : <p className="max-w-[330px] px-6 text-center text-2xl font-extrabold leading-relaxed">{activeStory.caption}</p>}
           </div>
-          {activeStory.media_url && activeStory.caption && <div className="absolute bottom-16 left-5 right-5 rounded-2xl bg-slate-950/55 px-4 py-3 text-center text-sm font-medium backdrop-blur">{activeStory.caption}</div>}
-          <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between"><button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.max(0, index - 1))} disabled={activeIndex === 0} aria-label="Previous story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button><span className="text-[10px] font-semibold text-white/65">{(activeIndex || 0) + 1} / {flatStories.length}</span><button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.min(flatStories.length - 1, index + 1))} disabled={activeIndex === flatStories.length - 1} aria-label="Next story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button></div>
+          {activeStory.media_url && activeStory.caption && <div className="shrink-0 px-5 py-3 text-center text-sm font-medium leading-6 text-white/90">{activeStory.caption}</div>}
+          <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-4 py-3">
+            <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.max(0, index - 1))} disabled={activeIndex === 0} aria-label="Previous story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button>
+            <span className="text-xs font-semibold text-white/65">{(activeIndex || 0) + 1} / {flatStories.length}</span>
+            <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.min(flatStories.length - 1, index + 1))} disabled={activeIndex === flatStories.length - 1} aria-label="Next story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
+          </div>
         </section>
       </div>}
     </div>

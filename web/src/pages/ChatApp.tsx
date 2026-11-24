@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
   ArrowLeft, Lock, LockKeyhole, LogOut, MessageCircle, Search, Send, Users,
-  ShieldCheck, Plus, Image as ImageIcon, MoreHorizontal, Circle, Sparkles
+  ShieldCheck, Plus
 } from 'lucide-react'
 import { getAuthToken, useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -447,15 +447,15 @@ export default function ChatApp() {
   }
 
   return (
-    <div className="newgen-app-shell h-[100dvh] w-full overflow-hidden bg-[#f6f7fb] text-slate-900 md:p-3">
-      <div className="newgen-app-frame mx-auto flex h-full max-w-[1600px] overflow-hidden bg-white md:rounded-[28px] md:border md:border-slate-200 md:shadow-[0_24px_80px_rgba(15,23,42,.10)]">
-        <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-[390px] shrink-0 flex-col border-r border-slate-100 bg-white newgen-sidebar`}>
-          <div className="newgen-brand-row flex items-center justify-between px-5 pb-4 pt-5">
+    <div className="newgen-app-shell w-full overflow-hidden text-slate-900">
+      <div className="newgen-app-frame mx-auto flex w-full max-w-[1600px] min-w-0 overflow-hidden bg-white">
+        <aside aria-label="Main navigation and conversations" className={`${activeId || showPinSetup ? 'hidden md:flex' : 'flex'} min-w-0 shrink-0 flex-col bg-white newgen-sidebar`}>
+          <div className="newgen-brand-row flex items-center justify-between gap-2 px-4 pb-3 pt-4 sm:px-5">
             <div className="flex items-center gap-3">
               <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-500 to-orange-400 text-white shadow-lg shadow-teal-200"><MessageCircle className="h-5 w-5"/></div>
               <div><div className="text-[21px] font-black tracking-tight">NEWGEN</div><div className="text-[10px] font-semibold uppercase tracking-[.22em] text-slate-400">Connect privately</div></div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
               <button type="button" onClick={() => void createGroup()} title="Create group" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-emerald-600"><Users className="h-5 w-5"/></button>
               <button type="button" onClick={() => {
                 if (window.confirm('Log out this account on every device? All active sessions will be revoked.')) {
@@ -466,7 +466,7 @@ export default function ChatApp() {
             </div>
           </div>
 
-          <div className="px-4 pb-4">
+          <div className="shrink-0 px-3 pb-3 sm:px-4">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/>
               <input className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-3 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50" placeholder="Search people or chats" value={search} onChange={e => setSearch(e.target.value)}/>
@@ -483,7 +483,7 @@ export default function ChatApp() {
             )}
           </div>
 
-          <div className="px-5 pb-3">
+          <div className="shrink-0 px-4 pb-3 sm:px-5">
             <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-extrabold uppercase tracking-[.18em] text-slate-400">Your space</h2><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-600">PRIVATE BY DESIGN</span></div>
             <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100/80 p-1">
               {(['chats','stories','requests'] as const).map(tab => (
@@ -510,7 +510,7 @@ export default function ChatApp() {
                 </div>
               </div>
               <div className="mx-5 border-t border-slate-100"/>
-              <div className="flex-1 overflow-y-auto px-2 py-2">
+              <div className="newgen-sidebar-list px-2 py-2">
                 {visibleConversations.length===0 && <div className="px-7 py-12 text-center"><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-emerald-50 text-emerald-500"><MessageCircle className="h-7 w-7"/></div><p className="text-sm font-bold text-slate-700">Your conversations start here</p><p className="mt-1 text-xs leading-5 text-slate-400">Search a username above to connect and start a private chat.</p></div>}
                 {visibleConversations.map(c => {
                   const name=displayName(c)
@@ -526,20 +526,33 @@ export default function ChatApp() {
           ) : activeTab === 'stories' ? (
             <StoriesHub />
           ) : (
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="newgen-sidebar-list p-4 sm:p-5">
               <div className="mb-4"><p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-500">Your circle</p><h2 className="mt-1 text-xl font-black">Connection requests</h2></div>
               {requests.length===0 && <div className="rounded-3xl bg-slate-50 p-8 text-center"><Users className="mx-auto h-8 w-8 text-slate-300"/><p className="mt-3 text-sm font-bold text-slate-600">All caught up</p><p className="mt-1 text-xs text-slate-400">New requests will appear here.</p></div>}
               <div className="space-y-3">{requests.map(request=><div key={request.id} className="rounded-2xl border border-slate-100 p-4 shadow-sm"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-emerald-500 to-pink-500 font-bold text-white">{request.other_username.slice(0,1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">@{request.other_username}</p><p className="text-xs text-slate-400">{request.direction==='incoming'?'Wants to connect with you':'Waiting for acceptance'}</p></div></div><div className="mt-3 flex gap-2">{request.direction==='incoming'?<><button type="button" onClick={()=>void respondToRequest(request,'accept')} className="flex-1 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700">Accept & chat</button><button type="button" onClick={()=>void respondToRequest(request,'decline')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Decline</button></>:<button type="button" onClick={()=>void respondToRequest(request,'cancel')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel request</button>}</div></div>)}</div>
             </div>
           )}
-          <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 font-black text-white">{profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" /> : (profile?.display_name?.[0] || profile?.username?.[0] || 'U').toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{profile?.display_name || '@' + (profile?.username ?? '…')}</span><span className="text-[10px] font-medium text-emerald-600">Your account is protected</span></span><ProfileEditor />
-            <button type="button" onClick={configurePersonalPin} className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-[11px] font-bold text-emerald-700">Set / Change PIN</button><ShieldCheck className="h-5 w-5 text-emerald-500"/></div></div>
+          <div className="shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 font-black text-white">{profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" /> : (profile?.display_name?.[0] || profile?.username?.[0] || 'U').toUpperCase()}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold text-slate-800">{profile?.display_name || '@' + (profile?.username ?? '…')}</span>
+                  <span className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-emerald-700"><ShieldCheck className="h-3 w-3" /> Account protected</span>
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <ProfileEditor />
+                <button type="button" onClick={configurePersonalPin} className="w-full rounded-xl border border-emerald-100 bg-white px-3 py-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50">Set / Change PIN</button>
+              </div>
+            </div>
+          </div>
         </aside>
 
-        <main className={`${activeId || showPinSetup?'flex':'hidden md:flex'} relative min-w-0 flex-1 flex-col overflow-hidden bg-[#fbfbfe] newgen-chat-panel`}>
+        <main aria-label="Chat workspace" className={`${activeId || showPinSetup?'flex':'hidden md:flex'} relative min-w-0 min-h-0 flex-1 flex-col overflow-hidden newgen-chat-panel`}>
           {showPinSetup ? (
-            <section className="flex flex-1 items-center justify-center overflow-y-auto p-5">
-              <div className="w-full max-w-[460px] rounded-[30px] border border-slate-100 bg-white p-7 shadow-[0_20px_70px_rgba(76,29,149,.08)]">
+            <section className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
+              <div className="my-auto w-full max-w-[460px] rounded-[26px] border border-slate-100 bg-white p-5 shadow-[0_16px_48px_rgba(15,60,42,.08)] sm:p-7">
                 <button type="button" onClick={() => setShowPinSetup(false)} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-emerald-700"><ArrowLeft className="h-4 w-4"/> Back</button>
                 <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 text-emerald-600"><ShieldCheck className="h-8 w-8"/></div>
                 <p className="text-center text-[10px] font-extrabold uppercase tracking-[.22em] text-emerald-500">Account privacy</p>
@@ -560,26 +573,26 @@ export default function ChatApp() {
               </div>
             </section>
           ) : !activeConv ? (
-            <div className="flex flex-1 items-center justify-center p-8">
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-5 sm:p-8">
               <div className="max-w-md text-center"><div className="mx-auto mb-6 grid h-24 w-24 place-items-center rounded-[32px] bg-gradient-to-br from-emerald-100 to-pink-100 text-emerald-600"><MessageCircle className="h-10 w-10"/></div><p className="text-xs font-extrabold uppercase tracking-[.24em] text-emerald-500">Welcome to your private space</p><h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900">Good conversations.<br/>Better boundaries.</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-400">Choose a chat to continue, or find someone new and build your circle. Your messages stay locked until you unlock them.</p><div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-white px-4 py-2 text-xs font-semibold text-emerald-600 shadow-sm"><ShieldCheck className="h-4 w-4"/> Privacy-first by design</div></div>
             </div>
           ) : (
             <>
-              <header className="newgen-chat-header z-10 flex min-h-[78px] shrink-0 items-center gap-3 border-b border-slate-100 bg-white/90 px-4 backdrop-blur-xl md:px-7">
+              <header className="newgen-chat-header flex min-h-[72px] shrink-0 items-center gap-3 border-b border-slate-100 px-3 sm:min-h-[76px] sm:px-5 lg:px-7">
                 <button type="button" onClick={leaveConversation} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Back"><ArrowLeft className="h-5 w-5"/></button>
                 <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-lg font-black text-white">{activeConv.otherProfile?.avatar_url ? <img src={activeConv.otherProfile.avatar_url} alt="" className="h-full w-full object-cover" /> : displayName(activeConv).slice(0,1).toUpperCase()}</span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-extrabold text-slate-900">{displayName(activeConv)}</span><span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400"><span className={`h-1.5 w-1.5 rounded-full ${activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'bg-emerald-400':'bg-slate-300'}`}/>{isUnlocked?'Unlocked on this device':activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'Online':'Private conversation · locked'}</span></span>
-                <div className="flex items-center gap-1"><button type="button" title="Audio calls are not available yet" aria-disabled="true" disabled className="hidden cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60 sm:block"><Circle className="h-4 w-4"/></button><button type="button" onClick={()=>isUnlocked?lockChat():setShowPasskeyDialog(true)} className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-extrabold transition ${isUnlocked?'bg-emerald-50 text-emerald-700':'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}>{isUnlocked?<ShieldCheck className="h-4 w-4"/>:<Lock className="h-4 w-4"/>}{isUnlocked?'Unlocked':'Unlock chat'}</button><button type="button" title="More options are not available yet" aria-disabled="true" disabled className="cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60"><MoreHorizontal className="h-5 w-5"/></button></div>
+                <button type="button" onClick={()=>isUnlocked?lockChat():setShowPasskeyDialog(true)} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-extrabold transition sm:px-4 ${isUnlocked?'bg-emerald-50 text-emerald-700 hover:bg-emerald-100':'bg-emerald-600 text-white shadow-sm shadow-emerald-100 hover:bg-emerald-700'}`} aria-label={isUnlocked?'Lock chat':'Unlock chat'}>{isUnlocked?<ShieldCheck className="h-4 w-4"/>:<Lock className="h-4 w-4"/>}<span>{isUnlocked?'Lock':'Unlock'}</span></button>
               </header>
               {!isUnlocked ? (
                 <>
-                  <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
+                  <div className="newgen-message-list flex flex-1 min-h-0 flex-col gap-4 overscroll-contain px-3 py-5 sm:px-5 sm:py-6 lg:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
                     <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-emerald-500"/> Your private messages are masked</div>
                     {messages.map(m=><div key={m.id} className={`flex ${m.sender_id===user?.id?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm ${m.sender_id===user?.id?'rounded-br-md bg-emerald-100 text-emerald-900':'rounded-bl-md border border-slate-100 bg-white text-slate-500'}`}><div className="text-sm tracking-[.18em]">✦ ✦ ✦ ✦ ✦ ✦</div><div className="mt-1 text-right text-[10px] text-slate-400">{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}</div></div></div>)}
                     {messages.length===0 && <div className="m-auto rounded-3xl bg-white p-8 text-center shadow-sm"><LockKeyhole className="mx-auto h-8 w-8 text-emerald-500"/><p className="mt-3 text-sm font-bold text-slate-700">Your private room</p><p className="mt-1 text-xs text-slate-400">Messages will appear here, hidden until you unlock them.</p></div>}
                     <div ref={bottomRef}/>
                   </div>
-                  <div className="shrink-0 border-t border-slate-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <div className="newgen-chat-composer border-t border-slate-100 p-3 pb-[max(.85rem,env(safe-area-inset-bottom))] sm:p-4">
                     {showPasskeyDialog ? <form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mx-auto max-w-lg space-y-2">
                       <p className="text-center text-sm font-extrabold text-slate-800">Unlock original messages</p>
                       <input type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" value={personalPinEntry} onChange={e=>setPersonalPinEntry(e.target.value.replace(/\D/g,''))} placeholder="Your personal PIN (4–12 digits)" className="pin-mask w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-300"/>
@@ -590,14 +603,13 @@ export default function ChatApp() {
                 </>
               ) : (
                 <>
-                  <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
+                  <div className="newgen-message-list flex flex-1 min-h-0 flex-col gap-4 overscroll-contain px-3 py-5 sm:px-5 sm:py-6 lg:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
                     <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-emerald-500"/> Messages decrypt only on this device</div>
                     {messages.map(m=>{const mine=m.sender_id===user?.id;return <div key={m.id} className={`message-enter flex ${mine?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-emerald-600 to-teal-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}><div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??(m.decryptError?'Old message (sent before PIN-only unlock) — cannot be shown':'✦ ✦ ✦ ✦ ✦ ✦')}</span></div><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}{mine&&<ShieldCheck className="h-3 w-3"/>}</div></div></div>})}
                     <div ref={bottomRef}/>
                   </div>
-                  <div className="shrink-0 border-t border-slate-100 bg-white/95 px-3 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:px-7 md:py-4">
+                  <div className="newgen-chat-composer border-t border-slate-100 px-3 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4 lg:px-7">
                     <form className="mx-auto flex max-w-5xl items-center gap-2 rounded-[22px] border border-slate-200 bg-slate-50 p-2 focus-within:border-emerald-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-50" onSubmit={e=>{e.preventDefault();void sendMessage()}}>
-                      <button type="button" aria-disabled="true" disabled className="cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60" title="Attachments are not enabled on web yet"><ImageIcon className="h-5 w-5"/></button>
                       <input className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm outline-none placeholder:text-slate-400" placeholder="Write a private message…" value={input} onChange={e=>setInput(e.target.value)} disabled={sending}/>
                       <button type="submit" disabled={sending||!input.trim()} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-200 transition hover:scale-[1.03] disabled:opacity-40"><Send className="h-4 w-4"/></button>
                     </form>

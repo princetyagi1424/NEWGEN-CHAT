@@ -108,17 +108,17 @@ export default function ProfileEditor() {
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} title="Edit profile" aria-label="Edit profile" className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-bold text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700">
+      <button type="button" onClick={() => setOpen(true)} title="Edit profile" aria-label="Edit profile" className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700">
         <Pencil className="h-3.5 w-3.5" /> Edit profile
       </button>
       {open && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={e => { if (e.target === e.currentTarget) setOpen(false) }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="profile-editor-title" className="w-full max-w-[440px] overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+        <div className="newgen-dialog-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setOpen(false) }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="profile-editor-title" className="newgen-dialog-panel max-w-[440px] rounded-[24px] border border-white/70 bg-white shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4 sm:px-6">
               <div><p className="text-[10px] font-extrabold uppercase tracking-[.18em] text-emerald-600">Your identity</p><h2 id="profile-editor-title" className="mt-1 text-xl font-black tracking-tight text-slate-900">Edit profile</h2></div>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close profile editor" className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X className="h-5 w-5" /></button>
             </div>
-            <form onSubmit={saveProfile} className="space-y-5 p-6">
+            <form onSubmit={saveProfile} className="space-y-4 p-5 sm:space-y-5 sm:p-6">
               <div className="flex flex-col items-center">
                 <div className="relative">
                   <div className="grid h-24 w-24 overflow-hidden place-items-center rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 text-emerald-700 ring-4 ring-emerald-50">
