@@ -1,4 +1,4 @@
-import { getDb, readBearer, sendError } from '../_lib/auth.js'
+import { getDb, readBearer, sendError, isTokenRevoked } from '../_lib/auth.js'
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const { data: account, error: accountError } = await db.from('app_users')
       .select('id,token_version').eq('id', token.sub).maybeSingle()
     if (accountError) throw accountError
-    if (!account || Number(account.token_version) !== Number(token.ver || 0)) {
+    if (!account || Number(account.token_version) !== Number(token.ver || 0) || await isTokenRevoked(db, token)) {
       return sendError(res, 401, 'Session expired; please sign in again')
     }
     const { data: users, error } = await db.from('app_users')
