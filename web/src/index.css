@@ -2,14 +2,14 @@
 
 :root {
   color-scheme: light;
-  --bg: #f5f3fb;
+  --bg: #f4f7f5;
   --panel: #ffffff;
-  --panel-2: #f7f5fc;
-  --border: #ebe7f3;
-  --text: #201b31;
-  --muted: #89839b;
-  --accent: #7652e8;
-  --accent-hover: #6240d0;
+  --panel-2: #f7faf8;
+  --border: #e7eeea;
+  --text: #17251f;
+  --muted: #829089;
+  --accent: #159b72;
+  --accent-hover: #0f805f;
   --success: #16a879;
   --danger: #dc4268;
   --warning: #c88728;
@@ -44,13 +44,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 /* WhatsApp x Instagram inspired app shell */
 .newgen-app-shell {
   background:
-    radial-gradient(ellipse at 12% 0%, rgb(227 77 154 / 10%), transparent 34%),
-    radial-gradient(ellipse at 92% 100%, rgb(118 82 232 / 12%), transparent 38%),
-    #f6f4fa;
+    radial-gradient(ellipse at 8% 0%, rgb(22 168 121 / 9%), transparent 34%),
+    radial-gradient(ellipse at 92% 100%, rgb(62 126 112 / 8%), transparent 38%),
+    #f4f7f5;
 }
 .newgen-app-frame {
-  border-color: rgb(230 224 241 / 90%);
-  box-shadow: 0 28px 90px rgb(47 31 83 / 12%);
+  border-color: rgb(226 235 230 / 95%);
+  box-shadow: 0 28px 90px rgb(30 56 44 / 10%);
 }
 .newgen-sidebar {
   background: linear-gradient(180deg, #fff 0%, #fdfcff 100%);
@@ -59,8 +59,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .newgen-brand-row { min-height: 82px; }
 .newgen-chat-panel {
   background:
-    radial-gradient(circle at 85% 12%, rgb(227 77 154 / 5%), transparent 26%),
-    linear-gradient(145deg, #fcfbff 0%, #f8f6fc 100%);
+    radial-gradient(circle at 85% 12%, rgb(22 168 121 / 5%), transparent 26%),
+    linear-gradient(145deg, #fbfdfb 0%, #f6faf7 100%);
 }
 .newgen-chat-header { border-color: #eeeaf5; }
 .newgen-tab-section button { letter-spacing: .01em; }

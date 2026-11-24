@@ -37,7 +37,9 @@ Main commit: `fb9fb63b5f20ea56acf0d52fa7bf53e2920ea52f`
 - Web login, registration and password recovery use atomic account-and-network attempt limiting through migration `008_atomic_web_auth_rate_limit.sql`.
 - Supabase profile enumeration and browser receipt writes are blocked by migration `009_profile_and_receipt_rls_hardening.sql`.
 - The Web client now has a confirmed “Log out all devices” action; successful logout-all invalidates every token version and clears local browser device metadata.
-- Unimplemented call, attachments and More options controls are disabled. Stories are clearly marked unavailable; publishing is not wired up.
+- Profile editor supports display name, bio and profile-photo updates; images use a private Supabase Storage bucket and short-lived signed URLs.
+- Web Stories supports photo/text publishing, friend-only reads, a story viewer, owner deletion and 24-hour expiry. Story media is held in private storage; story content is not end-to-end encrypted in this browser MVP.
+- Unimplemented call, chat attachments and More options controls remain disabled.
 
 ## Security fixes in the current work branch
 
@@ -71,7 +73,7 @@ These are source/CI validations only. They do not prove hosted Supabase migratio
 
 - Matrix/Olm/Megolm or another reviewed E2EE protocol; forward secrecy, device verification, cross-signing, backup/recovery, room key rotation and multi-device sync.
 - A complete end-to-end device-key distribution/recovery flow for Web and Android.
-- Web stories publishing (text/image/video/GIF), encrypted Web attachments, and WebRTC audio/video calls with STUN/TURN.
+- Web video/GIF stories, story reactions/replies/view receipts, encrypted Web stories and encrypted Web attachments; WebRTC audio/video calls with STUN/TURN.
 - Full Android/Web group owner/admin screens, invitation lifecycle, permissions and moderation parity.
 - Web HttpOnly-cookie/BFF sessions with CSRF protection.
 - Full two-account/two-device live integration tests, hosted Supabase RLS tests, penetration testing and independent cryptographic review.

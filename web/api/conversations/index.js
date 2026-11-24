@@ -29,8 +29,20 @@ export default async function handler(req, res) {
         const otherId = (members || []).find(m => m.user_id !== user.id)?.user_id
         let otherProfile = null
         if (otherId) {
-          const { data: p } = await db.from('app_users').select('id,username').eq('id', otherId).maybeSingle()
-          if (p) otherProfile = { id: p.id, username: p.username, display_name: p.username, avatar_url: null, bio: null, created_at: '', updated_at: '', last_seen_at: null }
+          const { data: p } = await db.from('profiles')
+            .select('id,username,display_name,avatar_url,bio,created_at,updated_at,last_seen_at')
+            .eq('id', otherId).maybeSingle()
+          if (p) {
+            let avatarUrl = p.avatar_url || null
+            if (avatarUrl && !(avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://'))) {
+              const { data: signed } = await db.storage.from('newgen-profile-media').createSignedUrl(avatarUrl, 60 * 60 * 12)
+              avatarUrl = signed?.signedUrl || null
+            }
+            otherProfile = { ...p, display_name: p.display_name || p.username, avatar_url: avatarUrl }
+          } else {
+            const { data: fallback } = await db.from('app_users').select('id,username').eq('id', otherId).maybeSingle()
+            if (fallback) otherProfile = { id: fallback.id, username: fallback.username, display_name: fallback.username, avatar_url: null, bio: null, created_at: '', updated_at: '', last_seen_at: null }
+          }
         }
         const { data: lastRows, error: lastError } = await db.from('messages').select('id,conversation_id,sender_id,ciphertext,iv,content_type,created_at,expires_at,deleted_at').eq('conversation_id', conv.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(1)
         if (lastError) throw lastError

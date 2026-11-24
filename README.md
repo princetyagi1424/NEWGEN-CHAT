@@ -33,7 +33,7 @@ NEWGEN CHAT is an Android-first username-based messaging project. This archive c
 
 1. **E2EE protocol:** the current passphrase AES-GCM implementation is a prototype, not a reviewed multi-device protocol. It has no forward secrecy, device identity verification, cross-signing, secure key backup/restore, or group key rotation. Do not advertise this build as a secure private messenger for sensitive communications.
 2. **Media UX:** the chat UI has a bounded attachment picker, encrypted direct/group upload, private download/decryption, image/PDF-first-page/text previews and audio/MP4 playback. Office document rendering, thumbnails, streaming, attachment forwarding and richer media controls remain incomplete. The media relay caps ciphertext to 6 MB per file.
-3. **Status media:** the connected status screen currently supports encrypted text statuses. Image/GIF/video stories and richer status controls still need UI implementation.
+3. **Stories:** Web supports friend-only text/photo stories with 24-hour expiry, but story content is service-readable and is not end-to-end encrypted. Web video/GIF stories, story reactions/replies/views and scheduled object cleanup remain future work. Android text statuses retain their separate encrypted payload flow.
 4. **Group keys:** group messages are encrypted payloads, but the app does not securely distribute, rotate, verify, or recover group keys. Sharing a group passphrase manually is a prototype workaround only.
 5. **Other UX gaps:** direct text forwarding, direct-chat block/unblock management and per-message/chat auto-expiry controls are now visible. Typing/presence UI, privacy preferences, last-seen controls, delivery receipt UI, report/abuse workflows, richer group administration and full settings remain incomplete.
 6. **Production infrastructure:** backend persistence is SQLite for single-instance development. PostgreSQL runtime migration, private object storage, a public HTTPS domain, TLS termination, backups, monitoring, abuse controls and production operations are not configured.
@@ -88,6 +88,6 @@ The current repository CI workflow validates the backend, Web client and Android
 - Web: **TypeScript validation and Vite production build passed**.
 - Android: the debug APK build was still running when this status snapshot was written; check the workflow link before treating it as passed.
 
-See `docs/IMPLEMENTATION-STATUS.md`, `docs/SECURITY_AUDIT.md`, `docs/EXTERNAL_BLOCKERS.md` and `docs/RELEASE-GATE-2026-11-23.md` for the honest implementation/release assessment.
+Before using Web profile photo upload or stories, apply `web/database/migrations/010_profile_stories.sql` in Supabase after the custom account schema and chat-auth bridge. See `docs/IMPLEMENTATION-STATUS.md`, `docs/SECURITY_AUDIT.md`, `docs/EXTERNAL_BLOCKERS.md` and `docs/RELEASE-GATE-2026-11-23.md` for the honest implementation/release assessment.
 
 A successful CI build is not proof of live Supabase migrations, Firebase delivery, two-device behavior, production E2EE, WebRTC calling, or an independent security review.

@@ -168,3 +168,37 @@ REVOKE ALL ON FUNCTION public.consume_account_auth_attempt(TEXT, TEXT, INTEGER, 
 GRANT EXECUTE ON FUNCTION public.consume_account_auth_attempt(TEXT, TEXT, INTEGER, INTEGER)
   TO service_role;
 
+-- ===== 010_profile_stories =====
+-- Editable Web profile images + friend-only 24-hour text/photo stories.
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+CREATE TABLE IF NOT EXISTS public.stories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.app_users(id) ON DELETE CASCADE,
+  story_type TEXT NOT NULL CHECK (story_type IN ('text', 'image')),
+  caption TEXT NOT NULL DEFAULT '',
+  media_path TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours'),
+  CONSTRAINT stories_payload_shape CHECK (
+    (story_type = 'text' AND media_path IS NULL AND length(caption) > 0)
+    OR (story_type = 'image' AND media_path IS NOT NULL)
+  ),
+  CONSTRAINT stories_caption_length CHECK (length(caption) <= 280)
+);
+CREATE INDEX IF NOT EXISTS stories_user_created_idx ON public.stories (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS stories_expiry_idx ON public.stories (expires_at);
+ALTER TABLE public.stories ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.stories FROM anon, authenticated;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES
+  ('newgen-profile-media', 'newgen-profile-media', FALSE, 1048576, ARRAY['image/jpeg', 'image/png', 'image/webp']),
+  ('newgen-story-media', 'newgen-story-media', FALSE, 2097152, ARRAY['image/jpeg', 'image/png', 'image/webp'])
+ON CONFLICT (id) DO UPDATE SET
+  public = FALSE,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;

@@ -5,9 +5,16 @@ export interface AppUser {
   id: string
   username: string
 }
+export interface AppProfile {
+  id: string
+  username: string
+  display_name: string | null
+  avatar_url: string | null
+  bio: string | null
+}
 interface AuthState {
   user: AppUser | null
-  profile: { id: string; username: string; display_name: string | null } | null
+  profile: AppProfile | null
   loading: boolean
   configured: boolean
   signUp: (username: string, password: string, securityAnswer: string) => Promise<{ error: string | null }>
@@ -41,6 +48,7 @@ function readSavedUser(): AppUser | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null)
+  const [profile, setProfile] = useState<AppProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const configured = true
 
@@ -115,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.removeItem(USER_KEY)
     await clearLocalData().catch(() => undefined)
     setUser(null)
+    setProfile(null)
   }, [])
   const signOutAll = useCallback(async () => {
     const token = sessionStorage.getItem(TOKEN_KEY)
@@ -135,10 +144,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.removeItem(USER_KEY)
       await clearLocalData().catch(() => undefined)
       setUser(null)
+      setProfile(null)
     }
   }, [])
-  const refreshProfile = useCallback(async () => {}, [])
-  const profile = user ? { id: user.id, username: user.username, display_name: user.username } : null
+  const refreshProfile = useCallback(async () => {
+    const token = sessionStorage.getItem(TOKEN_KEY)
+    if (!token) { setProfile(null); return }
+    try {
+      const response = await fetch(`${API_URL}/api/me`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        cache: 'no-store',
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || 'Could not load profile')
+      setProfile(data.profile || {
+        id: user?.id || data.user?.id || '',
+        username: user?.username || data.user?.username || '',
+        display_name: user?.username || data.user?.username || '',
+        avatar_url: null,
+        bio: null,
+      })
+    } catch (error) {
+      console.error('Load profile failed:', error)
+    }
+  }, [user?.id, user?.username])
+  useEffect(() => {
+    if (!user) { setProfile(null); return }
+    void refreshProfile()
+  }, [user?.id, refreshProfile])
   const value = useMemo(() => ({ user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile }), [user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
