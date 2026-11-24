@@ -133,3 +133,15 @@ test('Web login, registration, and password recovery use atomic account plus net
   assert.match(migration, /GRANT EXECUTE ON FUNCTION[\s\S]*TO service_role/);
   assert.doesNotMatch(recover, /newgen-recovery-throttle/);
 });
+
+test('Supabase profile data is server-only and browser clients cannot forge message receipts', () => {
+  const supabaseSchema = fs.readFileSync(path.join(repo, 'web/supabase/migrations/001_initial_schema.sql'), 'utf8');
+  const migration = fs.readFileSync(path.join(repo, 'web/database/migrations/009_profile_and_receipt_rls_hardening.sql'), 'utf8');
+  assert.match(supabaseSchema, /REVOKE ALL ON TABLE public\.profiles FROM anon, authenticated/i);
+  assert.doesNotMatch(supabaseSchema, /create policy "profiles_select"[^;]*using \(true\)/i);
+  assert.match(supabaseSchema, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.message_receipts FROM anon, authenticated/i);
+  assert.match(migration, /DROP POLICY IF EXISTS "profiles_select"/i);
+  assert.match(migration, /REVOKE ALL ON TABLE public\.profiles FROM anon, authenticated/i);
+  assert.match(migration, /DROP POLICY IF EXISTS "receipts_own"/i);
+  assert.match(migration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.message_receipts FROM anon, authenticated/i);
+});
