@@ -303,7 +303,7 @@ export default function ChatApp() {
     setSavingPin(true)
     setSetupPinError('')
     try {
-      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: hasPersonalPin ? 'change' : 'set', pin: setupPin, securityAnswer: setupSecurityAnswer }) })
+      await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: hasPersonalPin ? 'change' : 'set', pin: setupPin, securityAnswer: setupSecurityAnswer, currentPassword: setupCurrentPassword }) })
       setHasPersonalPin(true)
       setShowPinSetup(false)
       setSetupPin('')
