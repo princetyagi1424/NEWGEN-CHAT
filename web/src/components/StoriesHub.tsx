@@ -50,7 +50,7 @@ export default function StoriesHub() {
   const apiRequest = useCallback(async (method: 'GET' | 'POST' | 'DELETE', body?: unknown) => {
     const token = getAuthToken()
     if (!token) throw new Error('Please sign in again.')
-    const response = await fetch('/api/stories', {
+    const response = await fetch('/api/me?resource=stories', {
       method,
       headers: { Authorization: 'Bearer ' + token, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),

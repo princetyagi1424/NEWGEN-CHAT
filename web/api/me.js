@@ -1,4 +1,5 @@
 import { getDb, readBearer, sendError, isTokenRevoked, randomUUID } from './_lib/auth.js'
+import storiesHandler from './_lib/stories.js'
 
 const PROFILE_BUCKET = 'newgen-profile-media'
 const AVATAR_MAX_BYTES = 1024 * 1024
@@ -54,6 +55,7 @@ async function profileResponse(db, user) {
 }
 
 export default async function handler(req, res) {
+  if (req.query?.resource === 'stories') return storiesHandler(req, res)
   res.setHeader('Cache-Control', 'no-store')
   if (!['GET', 'PATCH'].includes(req.method)) return sendError(res, 405, 'Method not allowed')
   try {

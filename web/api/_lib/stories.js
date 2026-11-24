@@ -1,4 +1,4 @@
-import { getDb, readBearer, sendError, isTokenRevoked, randomUUID } from '../_lib/auth.js'
+import { getDb, readBearer, sendError, isTokenRevoked, randomUUID } from './auth.js'
 
 const STORY_BUCKET = 'newgen-story-media'
 const PROFILE_BUCKET = 'newgen-profile-media'
@@ -35,17 +35,48 @@ function decodeImageDataUrl(value) {
 
 async function signedUrl(db, bucket, path, seconds) {
   if (!path) return null
+  if (/^https?:\/\//i.test(path)) return path
   const { data, error } = await db.storage.from(bucket).createSignedUrl(path, seconds)
   if (error) throw error
   return data?.signedUrl || null
 }
 
-export default async function handler(req, res) {
+async function storyAuthor(db, userId, fallbackUsername) {
+  const { data: author, error } = await db.from('profiles')
+    .select('id,username,display_name,avatar_url,bio')
+    .eq('id', userId)
+    .maybeSingle()
+  if (error) throw error
+  const avatar = author?.avatar_url
+    ? await signedUrl(db, PROFILE_BUCKET, author.avatar_url, 60 * 60 * 12)
+    : null
+  return {
+    id: userId,
+    username: author?.username || fallbackUsername || 'unknown',
+    display_name: author?.display_name || author?.username || fallbackUsername || 'unknown',
+    avatar_url: avatar,
+    bio: author?.bio || null,
+  }
+}
+
+function toStory(row, author, mediaUrl) {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    story_type: row.kind,
+    caption: row.caption || '',
+    media_url: mediaUrl,
+    created_at: row.created_at,
+    expires_at: row.expires_at,
+    author,
+  }
+}
+
+export default async function storiesHandler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   if (!['GET', 'POST', 'DELETE'].includes(req.method)) return sendError(res, 405, 'Method not allowed')
-  let db
   try {
-    db = getDb()
+    const db = getDb()
     const user = await currentUser(req, db)
     if (!user) return sendError(res, 401, 'Authentication required')
 
@@ -58,48 +89,39 @@ export default async function handler(req, res) {
       const friendIds = (friendships || []).map(row => row.user_low === user.id ? row.user_high : row.user_low)
       const allowedIds = [...new Set([user.id, ...friendIds])]
 
-      // Remove expired rows and their private media opportunistically during reads.
+      // Expired rows and private objects are cleaned opportunistically when a
+      // connected user opens stories; visibility is still time-filtered below.
       const { data: expired, error: expiredError } = await db.from('stories')
-        .select('id,media_path')
+        .select('id,kind,media')
         .in('user_id', allowedIds)
         .lte('expires_at', now)
         .limit(100)
       if (expiredError) throw expiredError
       if (expired?.length) {
-        await db.from('stories').delete().in('id', expired.map(row => row.id))
-        const paths = expired.map(row => row.media_path).filter(Boolean)
+        const { error: deleteExpiredError } = await db.from('stories')
+          .delete().in('id', expired.map(row => row.id))
+        if (deleteExpiredError) throw deleteExpiredError
+        const paths = expired.filter(row => row.kind === 'image' && row.media && !/^https?:\/\//i.test(row.media)).map(row => row.media)
         if (paths.length) await db.storage.from(STORY_BUCKET).remove(paths).catch(() => undefined)
       }
 
       const { data: rows, error: storiesError } = await db.from('stories')
-        .select('id,user_id,story_type,caption,media_path,created_at,expires_at')
+        .select('id,user_id,kind,media,caption,bg,created_at,expires_at')
         .in('user_id', allowedIds)
         .gt('expires_at', now)
         .order('created_at', { ascending: false })
         .limit(100)
       if (storiesError) throw storiesError
 
-      const { data: profiles, error: profilesError } = await db.from('profiles')
-        .select('id,username,display_name,avatar_url,bio')
-        .in('id', allowedIds)
-      if (profilesError) throw profilesError
-      const profileById = new Map((profiles || []).map(row => [row.id, row]))
+      const authors = new Map()
       const stories = await Promise.all((rows || []).map(async row => {
-        const author = profileById.get(row.user_id)
-        const avatar = author?.avatar_url
-          ? /^https?:\/\//i.test(author.avatar_url) ? author.avatar_url : await signedUrl(db, PROFILE_BUCKET, author.avatar_url, 60 * 60 * 12)
-          : null
-        return {
-          ...row,
-          media_url: row.media_path ? await signedUrl(db, STORY_BUCKET, row.media_path, 60 * 10) : null,
-          author: {
-            id: row.user_id,
-            username: author?.username || 'unknown',
-            display_name: author?.display_name || author?.username || 'unknown',
-            avatar_url: avatar,
-            bio: author?.bio || null
-          }
+        let author = authors.get(row.user_id)
+        if (!author) {
+          author = await storyAuthor(db, row.user_id, row.user_id === user.id ? user.username : undefined)
+          authors.set(row.user_id, author)
         }
+        const mediaUrl = row.kind === 'image' ? await signedUrl(db, STORY_BUCKET, row.media, 60 * 10) : null
+        return toStory(row, author, mediaUrl)
       }))
       return res.status(200).json({ stories })
     }
@@ -111,7 +133,7 @@ export default async function handler(req, res) {
       if (!caption && !imageDataUrl) return sendError(res, 400, 'Add a short note or choose a photo')
 
       let mediaPath = null
-      let storyType = 'text'
+      let kind = 'text'
       if (imageDataUrl !== undefined) {
         const image = decodeImageDataUrl(imageDataUrl)
         mediaPath = user.id + '/' + randomUUID() + '.' + image.ext
@@ -119,56 +141,49 @@ export default async function handler(req, res) {
           contentType: image.mime, upsert: false, cacheControl: '3600'
         })
         if (uploadError) throw uploadError
-        storyType = 'image'
+        kind = 'image'
       }
 
       const createdAt = new Date()
       const { data: story, error: insertError } = await db.from('stories').insert({
         user_id: user.id,
-        story_type: storyType,
+        kind,
         caption,
-        media_path: mediaPath,
+        media: mediaPath,
         created_at: createdAt.toISOString(),
         expires_at: new Date(createdAt.getTime() + 24 * 60 * 60 * 1000).toISOString()
-      }).select('id,user_id,story_type,caption,media_path,created_at,expires_at').single()
+      }).select('id,user_id,kind,media,caption,bg,created_at,expires_at').single()
 
       if (insertError) {
         if (mediaPath) await db.storage.from(STORY_BUCKET).remove([mediaPath]).catch(() => undefined)
         throw insertError
       }
-      const { data: author } = await db.from('profiles')
-        .select('id,username,display_name,avatar_url,bio')
-        .eq('id', user.id)
-        .maybeSingle()
-      const avatar = author?.avatar_url
-        ? /^https?:\/\//i.test(author.avatar_url) ? author.avatar_url : await signedUrl(db, PROFILE_BUCKET, author.avatar_url, 60 * 60 * 12)
-        : null
-      return res.status(201).json({
-        story: {
-          ...story,
-          media_url: mediaPath ? await signedUrl(db, STORY_BUCKET, mediaPath, 60 * 10) : null,
-          author: { id: user.id, username: author?.username || user.username, display_name: author?.display_name || user.username, avatar_url: avatar, bio: author?.bio || null }
-        }
-      })
+      const author = await storyAuthor(db, user.id, user.username)
+      const mediaUrl = mediaPath ? await signedUrl(db, STORY_BUCKET, mediaPath, 60 * 10) : null
+      return res.status(201).json({ story: toStory(story, author, mediaUrl) })
     }
 
     const storyId = typeof req.body?.id === 'string' ? req.body.id : ''
     if (!storyId) return sendError(res, 400, 'Story ID is required')
     const { data: story, error: findError } = await db.from('stories')
-      .select('id,media_path')
+      .select('id,kind,media')
       .eq('id', storyId)
       .eq('user_id', user.id)
       .maybeSingle()
     if (findError) throw findError
     if (!story) return sendError(res, 404, 'Story not found')
-    const { error: deleteError } = await db.from('stories').delete().eq('id', storyId).eq('user_id', user.id)
+
+    const { error: deleteError } = await db.from('stories').delete()
+      .eq('id', storyId).eq('user_id', user.id)
     if (deleteError) throw deleteError
-    if (story.media_path) await db.storage.from(STORY_BUCKET).remove([story.media_path]).catch(() => undefined)
+    if (story.kind === 'image' && story.media && !/^https?:\/\//i.test(story.media)) {
+      await db.storage.from(STORY_BUCKET).remove([story.media]).catch(() => undefined)
+    }
     return res.status(200).json({ deleted: true })
   } catch (error) {
     if (error instanceof Error && /Story photo|Choose a valid|Image content/.test(error.message)) return sendError(res, 400, error.message)
     if (error?.message?.includes('Bucket not found') || error?.code === '42P01' || error?.code === 'PGRST205') {
-      return sendError(res, 503, 'Stories are not initialized yet. Apply web/database/migrations/010_profile_stories.sql in Supabase.')
+      return sendError(res, 503, 'Stories are not initialized yet. Apply migration 010_profile_stories.sql in Supabase.')
     }
     console.error('Stories API error:', error?.code || error?.name || 'story_request_failed')
     return sendError(res, 500, 'Could not process stories')
