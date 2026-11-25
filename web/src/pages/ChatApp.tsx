@@ -56,7 +56,9 @@ export default function ChatApp() {
   messagesRef.current = messages
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = activeId
-  const activeConv = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
+  const activeFromList = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
+  const [stickyConv, setStickyConv] = useState<ConvWithMeta | null>(null)
+  const activeConv = activeFromList || (stickyConv && stickyConv.id === activeId ? stickyConv : null)
   const isUnlocked = Boolean(passkey && activeId)
   const visibleConversations = conversations
 
@@ -93,9 +95,17 @@ export default function ChatApp() {
     if (!user?.id) return
     try {
       const result = await apiRequest('/api/conversations')
-      setConversations(result.conversations ?? [])
+      const next = Array.isArray(result.conversations) ? result.conversations : []
+      setConversations(next)
+      // Keep sticky conversation in sync when the list still contains it
+      setStickyConv(previous => {
+        if (!previous) return previous
+        const match = next.find((c: ConvWithMeta) => c.id === previous.id)
+        return match ? match : previous
+      })
     } catch (error) {
       console.error('Load conversations failed:', error)
+      // Do not clear the existing list on a transient API error
     }
   }, [user?.id, apiRequest])
 
@@ -195,14 +205,15 @@ export default function ChatApp() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   useEffect(() => {
-    const lock = () => lockChat()
-    const onVisibility = () => { if (document.visibilityState !== 'visible') lock() }
-    window.addEventListener('pagehide', lock)
-    window.addEventListener('blur', lock)
+    // Lock only when the page is actually hidden — not on input blur (mobile keyboards fire blur).
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') lockChat()
+    }
+    const onPageHide = () => lockChat()
+    window.addEventListener('pagehide', onPageHide)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      window.removeEventListener('pagehide', lock)
-      window.removeEventListener('blur', lock)
+      window.removeEventListener('pagehide', onPageHide)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [lockChat])
@@ -296,6 +307,7 @@ export default function ChatApp() {
       const conv = result.conversation as Conversation
       const next: ConvWithMeta = { ...conv, members: [{ user_id: user.id, role: 'owner' }, { user_id: other.id, role: 'member' }], otherProfile: other, lastMessage: null, unread_count: 0 }
       setConversations(previous => [next, ...previous.filter(item => item.id !== conv.id)])
+      setStickyConv(next)
       setActiveId(conv.id); setPasskey(null); setShowPasskeyDialog(false); setSearch(''); setSearchResults([]); setActiveTab('chats')
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Could not start chat')
@@ -309,6 +321,7 @@ export default function ChatApp() {
     try {
       const result = await apiRequest('/api/conversations', { method: 'POST', body: JSON.stringify({ name: name.trim() }) })
       setConversations(previous => [result.conversation, ...previous])
+      setStickyConv(result.conversation)
       setActiveId(result.conversation.id); setPasskey(null); setShowPasskeyDialog(true)
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Could not create group')
@@ -400,16 +413,24 @@ export default function ChatApp() {
     : (c.otherProfile?.display_name || c.otherProfile?.username || 'Direct chat')
 
   function openConversation(id: string) {
-    lockChat()
-    setActiveId(id)
+    const found = conversations.find(c => c.id === id) || null
+    if (found) setStickyConv({ ...found, unread_count: 0 })
+    setPasskey(null)
+    setPersonalPinEntry('')
     setPasskeyError('')
+    setMessages([])
+    setActiveId(id)
     setShowPasskeyDialog(false)
     setConversations(previous => previous.map(c => c.id === id ? { ...c, unread_count: 0 } : c))
   }
 
   function leaveConversation() {
-    lockChat()
+    setPasskey(null)
+    setPersonalPinEntry('')
+    setPasskeyError('')
+    setMessages([])
     setActiveId(null)
+    setStickyConv(null)
     setShowPasskeyDialog(false)
   }
 
