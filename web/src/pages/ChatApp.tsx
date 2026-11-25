@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNowStrict } from 'date-fns'
 import {
-  ArrowLeft, Lock, LockKeyhole, LogOut, MessageCircle, Search, Send, Users,
-  ShieldCheck, Plus, Image as ImageIcon, MoreHorizontal, Circle, Sparkles
+  ArrowLeft, Bell, CircleDot, Lock, LockKeyhole, MessageCircle, Plus, Search, Send, ShieldCheck, Users,
 } from 'lucide-react'
-import { getAuthToken, useAuth } from '../lib/auth'
+import { useAuth } from '../lib/auth'
+import { apiRequest } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { encryptWithConversationKey, decryptWithConversationKey } from '../crypto/passkey'
 import type { Conversation, Message, Profile } from '../types/database'
+import Avatar from '../components/Avatar'
+import ProfilePanel from '../components/ProfilePanel'
+import StoryComposer from '../components/StoryComposer'
+import StoryViewer, { type StoryGroup, type StoryItem } from '../components/StoryViewer'
 
 type ConvWithMeta = Conversation & {
   members?: { user_id: string; role: string }[]
@@ -15,10 +19,26 @@ type ConvWithMeta = Conversation & {
   lastMessage?: Message | null
 }
 type VisibleMessage = Message & { plaintext?: string; locked?: boolean; decryptError?: boolean }
-type ConnectionRequest = { id: string; other_user_id: string; other_username: string; direction: 'incoming' | 'outgoing'; status: string }
+type ConnectionRequest = {
+  id: string; other_user_id: string; other_username: string; other_display_name?: string; other_avatar?: string | null
+  direction: 'incoming' | 'outgoing'; status: string
+}
+type Tab = 'chats' | 'stories' | 'requests'
+type Panel = null | 'profile' | 'pin'
+
+const TAB_TITLES: Record<Tab, string> = { chats: 'Chats', stories: 'Stories', requests: 'Requests' }
+
+function toProfile(base: { id: string; username: string; display_name?: string | null; avatar?: string | null }): Profile {
+  return {
+    id: base.id, username: base.username, display_name: base.display_name || base.username, avatar_url: base.avatar ?? null,
+    bio: null, created_at: '', updated_at: '', last_seen_at: null,
+  } as Profile
+}
+
+const ago = (iso: string) => formatDistanceToNowStrict(new Date(iso))
 
 export default function ChatApp() {
-  const { user, profile, signOut, signOutAll } = useAuth()
+  const { user, profile } = useAuth()
   const [conversations, setConversations] = useState<ConvWithMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<VisibleMessage[]>([])
@@ -26,37 +46,39 @@ export default function ChatApp() {
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Profile[]>([])
   const [requests, setRequests] = useState<ConnectionRequest[]>([])
+  const [stories, setStories] = useState<StoryItem[]>([])
   const [sending, setSending] = useState(false)
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
   const [passkey, setPasskey] = useState<string | null>(null)
   const [personalPinEntry, setPersonalPinEntry] = useState('')
   const [passkeyError, setPasskeyError] = useState('')
   const [showPasskeyDialog, setShowPasskeyDialog] = useState(false)
-  const [showPinSetup, setShowPinSetup] = useState(false)
   const [setupPin, setSetupPin] = useState('')
   const [setupPinConfirm, setSetupPinConfirm] = useState('')
   const [setupSecurityAnswer, setSetupSecurityAnswer] = useState('')
   const [setupPinError, setSetupPinError] = useState('')
   const [savingPin, setSavingPin] = useState(false)
   const [creatingChat, setCreatingChat] = useState(false)
-  const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests'>('chats')
+  const [activeTab, setActiveTab] = useState<Tab>('chats')
+  const [panel, setPanel] = useState<Panel>(null)
+  const [composerOpen, setComposerOpen] = useState(false)
+  const [viewerStart, setViewerStart] = useState<number | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+
   const activeConv = useMemo(() => conversations.find(c => c.id === activeId) ?? null, [conversations, activeId])
   const isUnlocked = Boolean(passkey && activeId)
-  const visibleConversations = conversations.filter(c => Boolean(c.lastMessage))
+  const visibleConversations = useMemo(() => conversations.filter(c => Boolean(c.lastMessage)), [conversations])
+  const incomingCount = requests.filter(r => r.direction === 'incoming').length
+  // On phones only one screen shows at a time: the list, or a chat / profile / PIN screen.
+  const mainOnMobile = Boolean(activeId) || panel !== null
 
-  const apiRequest = useCallback(async (path: string, options: RequestInit = {}) => {
-    const token = getAuthToken()
-    if (!token) throw new Error('Please sign in again')
-    const response = await fetch(path, {
-      ...options,
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
-      cache: 'no-store',
-    })
-    const result = await response.json().catch(() => ({}))
-    if (!response.ok) throw new Error(result.error || 'Request failed')
-    return result
-  }, [])
+  const notify = useCallback((text: string, kind: 'ok' | 'error' = 'ok') => setNotice({ kind, text }), [])
+  useEffect(() => {
+    if (!notice) return
+    const timer = window.setTimeout(() => setNotice(null), 3200)
+    return () => window.clearTimeout(timer)
+  }, [notice])
 
   const lockChat = useCallback(() => {
     setPasskey(null)
@@ -67,23 +89,27 @@ export default function ChatApp() {
 
   const loadRequests = useCallback(async () => {
     if (!user) return
-    try {
-      const result = await apiRequest('/api/friends/requests')
-      setRequests(result.requests ?? [])
-    } catch (error) { console.error('Load connection requests failed:', error) }
-  }, [user, apiRequest])
+    try { setRequests((await apiRequest('/api/friends/requests')).requests ?? []) }
+    catch (error) { console.error('Load connection requests failed:', error) }
+  }, [user])
 
   const loadConversations = useCallback(async () => {
     if (!user) return
-    try {
-      const result = await apiRequest('/api/conversations')
-      setConversations(result.conversations ?? [])
-    } catch (error) {
-      console.error('Load conversations failed:', error)
-    }
-  }, [user, apiRequest])
+    try { setConversations((await apiRequest('/api/conversations')).conversations ?? []) }
+    catch (error) { console.error('Load conversations failed:', error) }
+  }, [user])
 
-  useEffect(() => { void loadConversations(); void loadRequests() }, [loadConversations, loadRequests])
+  const loadStories = useCallback(async () => {
+    if (!user) return
+    try { setStories((await apiRequest('/api/stories')).stories ?? []) }
+    catch (error) { console.error('Load stories failed:', error) }
+  }, [user])
+
+  useEffect(() => { void loadConversations(); void loadRequests(); void loadStories() }, [loadConversations, loadRequests, loadStories])
+  useEffect(() => {
+    const timer = window.setInterval(() => { void loadStories() }, 45_000)
+    return () => window.clearInterval(timer)
+  }, [loadStories])
 
   useEffect(() => {
     if (!user) return
@@ -103,87 +129,100 @@ export default function ChatApp() {
         const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
         const rows: VisibleMessage[] = []
         for (const message of result.messages ?? []) {
-          if (!passkey) {
-            rows.push({ ...message, plaintext: undefined, locked: true })
-          } else {
-            try {
-              rows.push({ ...message, plaintext: await decryptWithConversationKey(passkey, message.ciphertext, message.iv), locked: false })
-            } catch {
-              rows.push({ ...message, plaintext: undefined, locked: true, decryptError: true })
-            }
+          if (!passkey) rows.push({ ...message, plaintext: undefined, locked: true })
+          else {
+            try { rows.push({ ...message, plaintext: await decryptWithConversationKey(passkey, message.ciphertext, message.iv), locked: false }) }
+            catch { rows.push({ ...message, plaintext: undefined, locked: true, decryptError: true }) }
           }
         }
         if (!cancelled) setMessages(rows)
-      } catch (error) {
-        if (!cancelled) console.error('Load messages failed:', error)
-      }
+      } catch (error) { if (!cancelled) console.error('Load messages failed:', error) }
     }
     void refresh()
     const poll = window.setInterval(() => { void refresh() }, 2500)
     return () => { cancelled = true; window.clearInterval(poll) }
-  }, [activeId, passkey, user, apiRequest])
+  }, [activeId, passkey, user])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   useEffect(() => {
-    const lock = () => lockChat()
-    const onVisibility = () => { if (document.visibilityState !== 'visible') lock() }
-    window.addEventListener('pagehide', lock)
-    window.addEventListener('blur', lock)
+    // Lock when the page is hidden or closed. Window "blur" is deliberately not used:
+    // on phones it fires when the keyboard or a picker opens and would lock the chat mid-use.
+    const onVisibility = () => { if (document.visibilityState === 'hidden') lockChat() }
+    window.addEventListener('pagehide', lockChat)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      window.removeEventListener('pagehide', lock)
-      window.removeEventListener('blur', lock)
+      window.removeEventListener('pagehide', lockChat)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [lockChat])
 
   useEffect(() => {
     const query = search.trim().toLowerCase()
-    if (!query || query.length < 2) { setSearchResults([]); return }
+    if (query.length < 2) { setSearchResults([]); return }
     let cancelled = false
-    const controller = new AbortController()
     const timer = window.setTimeout(async () => {
       try {
-        const token = getAuthToken()
-        if (!token) throw new Error('Please sign in again')
-        const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-          signal: controller.signal,
-          cache: 'no-store',
-        })
-        const result = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(result.error || 'Could not search users')
-        if (!cancelled) setSearchResults((result.users ?? []).map((p: { id: string; username: string }) => ({
-          id: p.id, username: p.username, display_name: p.username, avatar_url: null, bio: null,
-          created_at: '', updated_at: '', last_seen_at: null,
-        })) as Profile[])
+        const result = await apiRequest(`/api/users/search?q=${encodeURIComponent(query)}`)
+        if (!cancelled) setSearchResults((result.users ?? []).map(toProfile))
       } catch (error) {
-        if (!cancelled && !(error instanceof DOMException && error.name === 'AbortError')) {
-          console.error('User search failed:', error)
-          setSearchResults([])
-        }
+        if (!cancelled) { console.error('User search failed:', error); setSearchResults([]) }
       }
     }, 250)
-    return () => { cancelled = true; window.clearTimeout(timer); controller.abort() }
-  }, [search, user?.id])
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [search])
 
+  // ---- Stories ----
+  const storyGroups = useMemo<StoryGroup[]>(() => {
+    const byUser = new Map<string, StoryGroup>()
+    for (const story of stories) {
+      const group = byUser.get(story.user_id) ?? { userId: story.user_id, author: story.author, stories: [], allSeen: true }
+      group.stories.push(story)
+      if (!story.seen) group.allSeen = false
+      byUser.set(story.user_id, group)
+    }
+    const latest = (g: StoryGroup) => g.stories[g.stories.length - 1].created_at
+    return [...byUser.values()].sort((a, b) => {
+      if (a.userId === user?.id) return -1
+      if (b.userId === user?.id) return 1
+      if (a.allSeen !== b.allSeen) return a.allSeen ? 1 : -1
+      return latest(b).localeCompare(latest(a))
+    })
+  }, [stories, user?.id])
+  const myGroup = storyGroups.find(g => g.userId === user?.id)
+  const friendGroups = storyGroups.filter(g => g.userId !== user?.id)
+  const groupByUser = useMemo(() => new Map(storyGroups.map(g => [g.userId, g])), [storyGroups])
+
+  function openStoryGroup(userId: string) {
+    const index = storyGroups.findIndex(g => g.userId === userId)
+    if (index >= 0) setViewerStart(index)
+  }
+  function onMyStoryTap() { if (myGroup) openStoryGroup(user!.id); else setComposerOpen(true) }
+  const markSeen = useCallback((storyId: string) => {
+    setStories(previous => previous.map(s => (s.id === storyId ? { ...s, seen: true } : s)))
+  }, [])
+
+  // ---- Navigation ----
+  function selectTab(tab: Tab) { setActiveTab(tab); setPanel(null); setActiveId(null); lockChat() }
+  function openProfile() { setPanel('profile'); lockChat(); setActiveId(null) }
+  function openConversation(id: string) {
+    lockChat(); setPanel(null); setActiveId(id); setPasskeyError(''); setShowPasskeyDialog(false)
+  }
+  function leaveConversation() { lockChat(); setActiveId(null); setShowPasskeyDialog(false) }
+
+  // ---- Actions ----
   async function sendConnectionRequest(other: Profile) {
     try {
       await apiRequest('/api/friends/requests', { method: 'POST', body: JSON.stringify({ username: other.username }) })
-      alert('Connection request sent.')
-      setSearch('')
-      setSearchResults([])
+      notify('Connection request sent')
+      setSearch(''); setSearchResults([])
       await loadRequests()
-    } catch (error) { alert(error instanceof Error ? error.message : 'Could not send request') }
+    } catch (error) { notify(error instanceof Error ? error.message : 'Could not send request', 'error') }
   }
 
-  function configurePersonalPin() {
-    setSetupPin('')
-    setSetupPinConfirm('')
-    setSetupSecurityAnswer('')
-    setSetupPinError('')
-    setShowPinSetup(true)
+  function openPinSetup() {
+    setSetupPin(''); setSetupPinConfirm(''); setSetupSecurityAnswer(''); setSetupPinError('')
+    setPanel('pin'); lockChat(); setActiveId(null)
   }
 
   async function savePersonalPin(event: React.FormEvent<HTMLFormElement>) {
@@ -191,18 +230,14 @@ export default function ChatApp() {
     if (!/^[0-9]{4,12}$/.test(setupPin)) { setSetupPinError('PIN must contain 4–12 digits.'); return }
     if (setupPin !== setupPinConfirm) { setSetupPinError('Both PIN entries must match.'); return }
     if (setupSecurityAnswer.trim().length < 2) { setSetupPinError('Enter your security answer.'); return }
-    setSavingPin(true)
-    setSetupPinError('')
+    setSavingPin(true); setSetupPinError('')
     try {
       await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'set', pin: setupPin, securityAnswer: setupSecurityAnswer }) })
-      setShowPinSetup(false)
-      setSetupPin('')
-      setSetupPinConfirm('')
-      setSetupSecurityAnswer('')
-      alert('Your personal chat PIN has been saved.')
-    } catch (error) {
-      setSetupPinError(error instanceof Error ? error.message : 'Could not save PIN')
-    } finally { setSavingPin(false) }
+      setPanel('profile')
+      setSetupPin(''); setSetupPinConfirm(''); setSetupSecurityAnswer('')
+      notify('Your chat PIN is saved')
+    } catch (error) { setSetupPinError(error instanceof Error ? error.message : 'Could not save PIN') }
+    finally { setSavingPin(false) }
   }
 
   async function respondToRequest(request: ConnectionRequest, action: 'accept' | 'decline' | 'cancel') {
@@ -210,38 +245,26 @@ export default function ChatApp() {
       await apiRequest('/api/friends/requests', { method: 'PATCH', body: JSON.stringify({ request_id: request.id, action }) })
       await loadRequests()
       if (action === 'accept') {
-        const other: Profile = { id: request.other_user_id, username: request.other_username, display_name: request.other_username, avatar_url: null, bio: null, created_at: '', updated_at: '', last_seen_at: null }
-        await startDirectChat(other)
+        await startDirectChat(toProfile({ id: request.other_user_id, username: request.other_username, display_name: request.other_display_name, avatar: request.other_avatar }))
+        void loadStories()
       }
-    } catch (error) { alert(error instanceof Error ? error.message : 'Could not update request') }
+    } catch (error) { notify(error instanceof Error ? error.message : 'Could not update request', 'error') }
   }
 
   async function startDirectChat(other: Profile) {
     if (!user || creatingChat) return
     setCreatingChat(true)
     try {
-      const result = await apiRequest('/api/conversations/direct', {
-        method: 'POST', body: JSON.stringify({ other_user_id: other.id }),
-      })
+      const result = await apiRequest('/api/conversations/direct', { method: 'POST', body: JSON.stringify({ other_user_id: other.id }) })
       const conv = result.conversation as Conversation
       const next: ConvWithMeta = {
-        ...conv,
-        members: [{ user_id: user.id, role: 'owner' }, { user_id: other.id, role: 'member' }],
-        otherProfile: other,
-        lastMessage: null,
+        ...conv, members: [{ user_id: user.id, role: 'owner' }, { user_id: other.id, role: 'member' }], otherProfile: other, lastMessage: null,
       }
       setConversations(previous => [next, ...previous.filter(item => item.id !== conv.id)])
-      setActiveId(conv.id)
-      setPasskey(null)
-      setShowPasskeyDialog(false)
-      setSearch('')
-      setSearchResults([])
-      setActiveTab('chats')
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not start chat')
-    } finally {
-      setCreatingChat(false)
-    }
+      setActiveTab('chats'); setPanel(null); setActiveId(conv.id)
+      setPasskey(null); setShowPasskeyDialog(false); setSearch(''); setSearchResults([])
+    } catch (error) { notify(error instanceof Error ? error.message : 'Could not start chat', 'error') }
+    finally { setCreatingChat(false) }
   }
 
   async function createGroup() {
@@ -251,32 +274,17 @@ export default function ChatApp() {
     try {
       const result = await apiRequest('/api/conversations', { method: 'POST', body: JSON.stringify({ name: name.trim() }) })
       setConversations(previous => [result.conversation, ...previous])
-      setActiveId(result.conversation.id)
-      setPasskey(null)
-      setShowPasskeyDialog(true)
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Could not create group')
-    }
+      setPanel(null); setActiveId(result.conversation.id); setPasskey(null); setShowPasskeyDialog(true)
+    } catch (error) { notify(error instanceof Error ? error.message : 'Could not create group', 'error') }
   }
 
   async function unlockChat() {
-    if (!activeId || !/^[0-9]{4,12}$/.test(personalPinEntry)) {
-      setPasskeyError('Enter your personal 4–12 digit PIN.')
-      return
-    }
+    if (!activeId || !/^[0-9]{4,12}$/.test(personalPinEntry)) { setPasskeyError('Enter your personal 4–12 digit PIN.'); return }
     try {
-      const result = await apiRequest('/api/auth/chat-pin', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'unlock', pin: personalPinEntry, conversationId: activeId }),
-      })
+      const result = await apiRequest('/api/auth/chat-pin', { method: 'POST', body: JSON.stringify({ action: 'unlock', pin: personalPinEntry, conversationId: activeId }) })
       if (typeof result.key !== 'string') throw new Error('Could not unlock this chat.')
-      setPasskey(result.key)
-      setPersonalPinEntry('')
-      setPasskeyError('')
-      setShowPasskeyDialog(false)
-    } catch (error) {
-      setPasskeyError(error instanceof Error ? error.message : 'Incorrect PIN.')
-    }
+      setPasskey(result.key); setPersonalPinEntry(''); setPasskeyError(''); setShowPasskeyDialog(false)
+    } catch (error) { setPasskeyError(error instanceof Error ? error.message : 'Incorrect PIN.') }
   }
 
   async function sendMessage() {
@@ -284,9 +292,7 @@ export default function ChatApp() {
     setSending(true)
     try {
       const encrypted = await encryptWithConversationKey(passkey, input.trim())
-      await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`, {
-        method: 'POST', body: JSON.stringify(encrypted),
-      })
+      await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`, { method: 'POST', body: JSON.stringify(encrypted) })
       setInput('')
       const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(activeId)}`)
       const visible: VisibleMessage[] = []
@@ -296,196 +302,287 @@ export default function ChatApp() {
       }
       setMessages(visible)
       await loadConversations()
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Message could not be sent')
-    } finally {
-      setSending(false)
-    }
+    } catch (error) { notify(error instanceof Error ? error.message : 'Message could not be sent', 'error') }
+    finally { setSending(false) }
   }
 
-  const displayName = (c: ConvWithMeta) => c.type === 'group'
-    ? (c.name || 'Group')
-    : (c.otherProfile?.display_name || c.otherProfile?.username || 'Direct chat')
-
-  function openConversation(id: string) {
-    lockChat()
-    setActiveId(id)
-    setPasskeyError('')
-    setShowPasskeyDialog(false)
+  const nameOf = (c: ConvWithMeta) => c.type === 'group' ? (c.name || 'Group') : (c.otherProfile?.display_name || c.otherProfile?.username || 'Direct chat')
+  const isOnline = (c: ConvWithMeta) => Boolean(c.otherProfile && onlineIds.has(c.otherProfile.id))
+  const ringFor = (userId?: string) => {
+    const group = userId ? groupByUser.get(userId) : undefined
+    return group ? (group.allSeen ? 'seen' as const : 'new' as const) : 'none' as const
   }
 
-  function leaveConversation() {
-    lockChat()
-    setActiveId(null)
-    setShowPasskeyDialog(false)
-  }
+  const tabButtons: { tab: Tab; label: string; icon: typeof MessageCircle; badge?: number }[] = [
+    { tab: 'chats', label: 'Chats', icon: MessageCircle },
+    { tab: 'stories', label: 'Stories', icon: CircleDot },
+    { tab: 'requests', label: 'Requests', icon: Bell, badge: incomingCount },
+  ]
+  const inputClass = 'w-full rounded-2xl bg-[#F3F4F7] px-4 py-3.5 text-sm font-medium outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-violet-200'
+
+  // ---- Screens ----
+  const listHeader = (
+    <header className="safe-top flex items-center justify-between px-5 pb-2 pt-5 md:pt-6">
+      <h1 className="text-[28px] font-extrabold tracking-tight">{TAB_TITLES[activeTab]}</h1>
+      <div className="flex items-center gap-1">
+        {activeTab === 'chats' && <button type="button" onClick={() => void createGroup()} aria-label="New group" title="New group" className="grid h-10 w-10 place-items-center rounded-full text-slate-600 transition hover:bg-slate-100"><Users className="h-5 w-5" /></button>}
+        {activeTab === 'stories' && <button type="button" onClick={() => setComposerOpen(true)} aria-label="Add story" title="Add story" className="brand-gradient grid h-10 w-10 place-items-center rounded-full text-white shadow-md shadow-violet-200"><Plus className="h-5 w-5" /></button>}
+      </div>
+    </header>
+  )
+
+  const searchBox = (
+    <div className="px-5 pb-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input className={`${inputClass} pl-11`} placeholder="Search people to connect" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search people" />
+      </div>
+      {search.trim().length >= 2 && (
+        <div className="mt-2 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-lg">
+          {searchResults.length ? searchResults.map(p => (
+            <button key={p.id} type="button" onClick={() => void sendConnectionRequest(p)} disabled={creatingChat} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50 disabled:opacity-50">
+              <Avatar name={p.display_name || p.username} src={p.avatar_url} size={40} />
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{p.display_name}</span><span className="block truncate text-xs text-slate-400">@{p.username} · Send request</span></span>
+              <Plus className="h-4 w-4 text-violet-600" />
+            </button>
+          )) : <p className="p-4 text-xs text-slate-400">No matching users found.</p>}
+        </div>
+      )}
+    </div>
+  )
+
+  const storyStrip = (
+    <div className="no-scrollbar flex gap-4 overflow-x-auto px-5 pb-4 pt-1">
+      <div className="flex w-[64px] shrink-0 flex-col items-center gap-1.5">
+        <Avatar
+          name={profile?.display_name ?? 'You'} src={profile?.avatar} size={64} ring={myGroup ? (myGroup.allSeen ? 'seen' : 'new') : 'none'}
+          onClick={onMyStoryTap} label="Your story"
+          badge={<span role="button" tabIndex={0} aria-label="Add story" onClick={e => { e.stopPropagation(); setComposerOpen(true) }} onKeyDown={e => { if (e.key === 'Enter') setComposerOpen(true) }} className="brand-gradient absolute -bottom-0.5 -right-0.5 grid h-6 w-6 place-items-center rounded-full border-2 border-white text-white"><Plus className="h-3.5 w-3.5" /></span>}
+        />
+        <span className="w-full truncate text-center text-[11px] font-semibold text-slate-500">Your story</span>
+      </div>
+      {friendGroups.map(group => (
+        <div key={group.userId} className="flex w-[64px] shrink-0 flex-col items-center gap-1.5">
+          <Avatar name={group.author.display_name} src={group.author.avatar} size={64} ring={group.allSeen ? 'seen' : 'new'} onClick={() => openStoryGroup(group.userId)} />
+          <span className="w-full truncate text-center text-[11px] font-semibold text-slate-500">{group.author.display_name}</span>
+        </div>
+      ))}
+    </div>
+  )
+
+  const chatsList = (
+    <>
+      {searchBox}
+      {storyStrip}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        {visibleConversations.length === 0 && (
+          <div className="px-8 py-14 text-center">
+            <div className="brand-gradient mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl text-white"><MessageCircle className="h-7 w-7" /></div>
+            <p className="text-base font-extrabold">No chats yet</p>
+            <p className="mt-1 text-sm leading-6 text-slate-400">Search a username above to connect and start a private chat.</p>
+          </div>
+        )}
+        {visibleConversations.map(c => {
+          const name = nameOf(c)
+          const selected = activeId === c.id
+          return (
+            <button key={c.id} type="button" onClick={() => openConversation(c.id)} className={`flex w-full items-center gap-3.5 rounded-2xl px-3 py-3 text-left transition ${selected ? 'bg-[#F3F1FF]' : 'hover:bg-slate-50 active:bg-slate-100'}`}>
+              <Avatar name={name} src={c.otherProfile?.avatar_url} size={54} ring={c.type === 'direct' ? ringFor(c.otherProfile?.id) : 'none'} online={isOnline(c)} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2"><span className="truncate text-[15px] font-bold">{name}</span><span className="shrink-0 text-[11px] text-slate-400">{c.lastMessage ? ago(c.lastMessage.created_at) : ''}</span></span>
+                <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-slate-400"><Lock className="h-3 w-3 shrink-0" /><span className="truncate">Private message</span></span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </>
+  )
+
+  const storiesList = (
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+      <button type="button" onClick={onMyStoryTap} className="flex w-full items-center gap-3.5 rounded-2xl px-2 py-3 text-left transition hover:bg-slate-50">
+        <Avatar name={profile?.display_name ?? 'You'} src={profile?.avatar} size={58} ring={myGroup ? (myGroup.allSeen ? 'seen' : 'new') : 'none'} badge={myGroup ? undefined : <span className="brand-gradient absolute -bottom-0.5 -right-0.5 grid h-6 w-6 place-items-center rounded-full border-2 border-white text-white"><Plus className="h-3.5 w-3.5" /></span>} />
+        <span className="min-w-0 flex-1"><span className="block text-[15px] font-bold">My story</span><span className="block text-[13px] text-slate-400">{myGroup ? `${myGroup.stories.length} active · tap to view` : 'Share a moment for 24 hours'}</span></span>
+      </button>
+      {[{ title: 'Recent updates', items: friendGroups.filter(g => !g.allSeen) }, { title: 'Viewed', items: friendGroups.filter(g => g.allSeen) }].map(section => section.items.length ? (
+        <div key={section.title} className="mt-3">
+          <p className="px-2 pb-1 text-[11px] font-bold uppercase tracking-[.14em] text-slate-400">{section.title}</p>
+          {section.items.map(group => (
+            <button key={group.userId} type="button" onClick={() => openStoryGroup(group.userId)} className="flex w-full items-center gap-3.5 rounded-2xl px-2 py-2.5 text-left transition hover:bg-slate-50">
+              <Avatar name={group.author.display_name} src={group.author.avatar} size={54} ring={group.allSeen ? 'seen' : 'new'} />
+              <span className="min-w-0 flex-1"><span className="block truncate text-[15px] font-bold">{group.author.display_name}</span><span className="block text-[13px] text-slate-400">{ago(group.stories[group.stories.length - 1].created_at)} ago</span></span>
+            </button>
+          ))}
+        </div>
+      ) : null)}
+      {friendGroups.length === 0 && <p className="px-6 py-10 text-center text-sm leading-6 text-slate-400">When your connections share a story, it appears here. Stories disappear after 24 hours.</p>}
+    </div>
+  )
+
+  const requestsList = (
+    <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+      {requests.length === 0 && (
+        <div className="px-6 py-14 text-center"><div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-3xl bg-slate-100 text-slate-400"><Users className="h-6 w-6" /></div><p className="text-base font-extrabold">All caught up</p><p className="mt-1 text-sm text-slate-400">New connection requests will appear here.</p></div>
+      )}
+      <div className="space-y-2.5">
+        {requests.map(request => (
+          <div key={request.id} className="rounded-3xl bg-[#F8F8FB] p-4">
+            <div className="flex items-center gap-3">
+              <Avatar name={request.other_display_name || request.other_username} src={request.other_avatar} size={48} />
+              <div className="min-w-0 flex-1"><p className="truncate text-[15px] font-bold">{request.other_display_name || request.other_username}</p><p className="truncate text-xs text-slate-400">@{request.other_username} · {request.direction === 'incoming' ? 'wants to connect' : 'waiting for reply'}</p></div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              {request.direction === 'incoming' ? (
+                <><button type="button" onClick={() => void respondToRequest(request, 'accept')} className="brand-gradient flex-1 rounded-2xl py-2.5 text-sm font-extrabold text-white">Accept</button><button type="button" onClick={() => void respondToRequest(request, 'decline')} className="rounded-2xl bg-white px-5 py-2.5 text-sm font-bold text-slate-600">Decline</button></>
+              ) : <button type="button" onClick={() => void respondToRequest(request, 'cancel')} className="rounded-2xl bg-white px-5 py-2.5 text-sm font-bold text-slate-600">Cancel request</button>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+
+  const bottomBar = (
+    <nav className="safe-bottom flex shrink-0 items-center justify-around border-t border-slate-100 bg-white/95 px-2 pt-1.5 backdrop-blur md:hidden" aria-label="Main">
+      {tabButtons.map(({ tab, label, icon: Icon, badge }) => {
+        const active = activeTab === tab && panel === null
+        return (
+          <button key={tab} type="button" onClick={() => selectTab(tab)} className={`relative flex min-w-[64px] flex-col items-center gap-0.5 rounded-2xl px-3 py-1.5 text-[11px] font-bold transition ${active ? 'text-violet-600' : 'text-slate-400'}`}>
+            <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.4 : 2} />{label}
+            {badge ? <span className="absolute right-3 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-pink-500 px-1 text-[9px] font-extrabold text-white">{badge}</span> : null}
+          </button>
+        )
+      })}
+      <button type="button" onClick={openProfile} className={`flex min-w-[64px] flex-col items-center gap-0.5 rounded-2xl px-3 py-1.5 text-[11px] font-bold ${panel ? 'text-violet-600' : 'text-slate-400'}`}>
+        <Avatar name={profile?.display_name ?? 'Me'} src={profile?.avatar} size={24} />Me
+      </button>
+    </nav>
+  )
+
+  const pinSetup = (
+    <section className="flex flex-1 flex-col overflow-y-auto bg-white">
+      <div className="safe-top mx-auto w-full max-w-[460px] px-5 pb-10 pt-4">
+        <button type="button" onClick={() => setPanel('profile')} className="mb-2 flex items-center gap-2 rounded-xl py-2 text-sm font-semibold text-slate-500 hover:text-slate-900"><ArrowLeft className="h-4 w-4" /> Back</button>
+        <div className="brand-gradient mb-4 grid h-14 w-14 place-items-center rounded-2xl text-white"><ShieldCheck className="h-7 w-7" /></div>
+        <h1 className="text-3xl font-extrabold tracking-tight">Chat PIN</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-400">This PIN belongs only to your account. Use it to unlock your private chats. You can pick a different PIN from the people you chat with.</p>
+        <form onSubmit={savePersonalPin} className="mt-6 space-y-4">
+          <div><label htmlFor="setup-pin" className="mb-1.5 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">New PIN</label>
+            <input id="setup-pin" required type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={12} value={setupPin} onChange={e => setSetupPin(e.target.value.replace(/\D/g, ''))} placeholder="4–12 digits" className={`pin-mask ${inputClass}`} /></div>
+          <div><label htmlFor="setup-pin2" className="mb-1.5 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">Confirm PIN</label>
+            <input id="setup-pin2" required type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={12} value={setupPinConfirm} onChange={e => setSetupPinConfirm(e.target.value.replace(/\D/g, ''))} placeholder="Re-enter your PIN" className={`pin-mask ${inputClass}`} /></div>
+          <div><label htmlFor="setup-answer" className="mb-1.5 block text-xs font-bold uppercase tracking-[.12em] text-slate-400">What was the name of your first school?</label>
+            <input id="setup-answer" required type="text" autoComplete="off" value={setupSecurityAnswer} onChange={e => setSetupSecurityAnswer(e.target.value)} placeholder="Your security answer" className={inputClass} /></div>
+          {setupPinError && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600">{setupPinError}</p>}
+          <button type="submit" disabled={savingPin} className="brand-gradient w-full rounded-2xl py-3.5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 disabled:opacity-50">{savingPin ? 'Saving…' : 'Save PIN'}</button>
+        </form>
+        <p className="mt-4 text-center text-[11px] leading-5 text-slate-400">Your PIN is stored as a one-way hash and never shown again.</p>
+      </div>
+    </section>
+  )
+
+  const emptyMain = (
+    <div className="flex flex-1 items-center justify-center p-8">
+      <div className="max-w-sm text-center">
+        <div className="brand-gradient mx-auto mb-6 grid h-20 w-20 place-items-center rounded-[28px] text-white shadow-xl shadow-violet-200"><MessageCircle className="h-9 w-9" /></div>
+        <h2 className="text-3xl font-extrabold leading-tight tracking-tight">Good conversations.<br />Better boundaries.</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-400">Pick a chat, or find someone new. Your messages stay hidden until you unlock them with your PIN.</p>
+      </div>
+    </div>
+  )
+
+  const chatView = activeConv && (
+    <>
+      <header className="safe-top flex shrink-0 items-center gap-3 border-b border-slate-100 bg-white px-3 pb-3 pt-3 md:px-6">
+        <button type="button" onClick={leaveConversation} aria-label="Back to chats" className="grid h-10 w-10 place-items-center rounded-full text-slate-700 transition hover:bg-slate-100 md:hidden"><ArrowLeft className="h-5 w-5" /></button>
+        <Avatar name={nameOf(activeConv)} src={activeConv.otherProfile?.avatar_url} size={44} ring={activeConv.type === 'direct' ? ringFor(activeConv.otherProfile?.id) : 'none'} online={isOnline(activeConv)} onClick={activeConv.type === 'direct' && activeConv.otherProfile && groupByUser.has(activeConv.otherProfile.id) ? () => openStoryGroup(activeConv.otherProfile!.id) : undefined} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-extrabold">{nameOf(activeConv)}</p>
+          <p className="truncate text-xs text-slate-400">{isUnlocked ? 'Unlocked' : isOnline(activeConv) ? 'Online' : 'Private conversation'}</p>
+        </div>
+        <button type="button" onClick={() => (isUnlocked ? lockChat() : setShowPasskeyDialog(true))} className={`flex items-center gap-1.5 rounded-full px-4 py-2.5 text-xs font-extrabold transition ${isUnlocked ? 'bg-emerald-50 text-emerald-700' : 'bg-[#F3F1FF] text-violet-700 hover:bg-violet-100'}`}>
+          {isUnlocked ? <ShieldCheck className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{isUnlocked ? 'Unlocked' : 'Unlock'}
+        </button>
+      </header>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain bg-[#FAFAFC] px-4 py-5 md:px-8">
+        <div className="mx-auto mb-2 flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[11px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-violet-500" />{isUnlocked ? 'Messages are readable only while unlocked' : 'Messages are hidden until you unlock'}</div>
+        {messages.map(m => {
+          const mine = m.sender_id === user?.id
+          return (
+            <div key={m.id} className={`message-enter flex ${mine ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[82%] rounded-[22px] px-4 py-2.5 md:max-w-[62%] ${mine ? 'brand-gradient rounded-br-md text-white' : 'rounded-bl-md bg-white text-slate-800 shadow-sm'}`}>
+                <p className={`whitespace-pre-wrap break-words text-[15px] leading-6 ${m.plaintext === undefined ? 'tracking-[.2em] opacity-80' : ''}`}>
+                  {m.plaintext ?? (m.decryptError ? 'Older message — cannot be shown' : '✦ ✦ ✦ ✦ ✦ ✦')}
+                </p>
+                <p className={`mt-0.5 text-right text-[10px] ${mine ? 'text-white/70' : 'text-slate-400'}`}>{ago(m.created_at)}</p>
+              </div>
+            </div>
+          )
+        })}
+        {messages.length === 0 && <div className="m-auto text-center"><LockKeyhole className="mx-auto h-8 w-8 text-violet-400" /><p className="mt-3 text-sm font-bold text-slate-600">Your private room</p><p className="mt-1 text-xs text-slate-400">Say hello after you unlock.</p></div>}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="safe-bottom shrink-0 border-t border-slate-100 bg-white px-3 pt-3 md:px-6">
+        {!isUnlocked ? (
+          showPasskeyDialog ? (
+            <form onSubmit={e => { e.preventDefault(); void unlockChat() }} className="mx-auto max-w-lg space-y-2 pb-3">
+              <p className="text-center text-sm font-extrabold">Enter your PIN</p>
+              <input autoFocus type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={12} value={personalPinEntry} onChange={e => setPersonalPinEntry(e.target.value.replace(/\D/g, ''))} placeholder="Your personal PIN" aria-label="Personal PIN" className={`pin-mask ${inputClass} text-center ${personalPinEntry ? 'tracking-[.3em]' : ''}`} />
+              {passkeyError && <p role="alert" className="text-center text-xs font-medium text-rose-600">{passkeyError}</p>}
+              <div className="flex gap-2"><button type="button" onClick={() => { setShowPasskeyDialog(false); setPersonalPinEntry(''); setPasskeyError('') }} className="flex-1 rounded-2xl bg-[#F3F4F7] py-3 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="brand-gradient flex-1 rounded-2xl py-3 text-sm font-extrabold text-white">Unlock</button></div>
+            </form>
+          ) : (
+            <div className="pb-3"><button type="button" onClick={() => setShowPasskeyDialog(true)} className="brand-gradient mx-auto flex w-full max-w-lg items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-extrabold text-white shadow-lg shadow-violet-200"><LockKeyhole className="h-4 w-4" /> Enter PIN to read messages</button></div>
+          )
+        ) : (
+          <form className="mx-auto flex max-w-4xl items-center gap-2 pb-3" onSubmit={e => { e.preventDefault(); void sendMessage() }}>
+            <input className="min-w-0 flex-1 rounded-full bg-[#F3F4F7] px-5 py-3.5 text-[15px] outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-violet-200" placeholder="Message…" value={input} onChange={e => setInput(e.target.value)} disabled={sending} aria-label="Message" />
+            <button type="submit" disabled={sending || !input.trim()} aria-label="Send" className="brand-gradient grid h-12 w-12 shrink-0 place-items-center rounded-full text-white shadow-md shadow-violet-200 transition active:scale-95 disabled:opacity-40"><Send className="h-5 w-5" /></button>
+          </form>
+        )}
+      </div>
+    </>
+  )
 
   return (
-    <div className="newgen-app-shell h-[100dvh] w-full overflow-hidden bg-[#f6f7fb] text-slate-900 md:p-3">
-      <div className="newgen-app-frame mx-auto flex h-full max-w-[1600px] overflow-hidden bg-white md:rounded-[28px] md:border md:border-slate-200 md:shadow-[0_24px_80px_rgba(15,23,42,.10)]">
-        <aside className={`${activeId ? 'hidden md:flex' : 'flex'} w-full md:w-[390px] shrink-0 flex-col border-r border-slate-100 bg-white newgen-sidebar`}>
-          <div className="newgen-brand-row flex items-center justify-between px-5 pb-4 pt-5">
-            <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 via-fuchsia-500 to-orange-400 text-white shadow-lg shadow-fuchsia-200"><MessageCircle className="h-5 w-5"/></div>
-              <div><div className="text-[21px] font-black tracking-tight">NEWGEN</div><div className="text-[10px] font-semibold uppercase tracking-[.22em] text-slate-400">Connect privately</div></div>
-            </div>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => void createGroup()} title="Create group" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-violet-600"><Users className="h-5 w-5"/></button>
-              <button type="button" onClick={() => {
-                if (window.confirm('Log out this account on every device? All active sessions will be revoked.')) {
-                  void signOutAll().catch(error => window.alert(error instanceof Error ? error.message : 'Could not revoke all sessions.'))
-                }
-              }} title="Log out all devices" aria-label="Log out all devices" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-amber-600"><ShieldCheck className="h-5 w-5"/></button>
-              <button type="button" onClick={() => void signOut()} title="Sign out" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-rose-500"><LogOut className="h-5 w-5"/></button>
-            </div>
+    <div className="h-[100dvh] w-full bg-white md:bg-[#F1F2F6] md:p-4">
+      <div className="mx-auto flex h-full max-w-[1480px] overflow-hidden bg-white md:rounded-[28px] md:shadow-[0_30px_80px_rgba(20,22,40,.12)]">
+        {/* Desktop rail */}
+        <nav className="hidden w-[76px] shrink-0 flex-col items-center border-r border-slate-100 py-5 md:flex" aria-label="Main">
+          <div className="brand-gradient grid h-11 w-11 place-items-center rounded-2xl text-white shadow-md shadow-violet-200" title="NEWGEN"><MessageCircle className="h-5 w-5" /></div>
+          <div className="mt-8 flex flex-col gap-2">
+            {tabButtons.map(({ tab, label, icon: Icon, badge }) => {
+              const active = activeTab === tab && panel === null
+              return (
+                <button key={tab} type="button" onClick={() => selectTab(tab)} title={label} aria-label={label} className={`relative grid h-12 w-12 place-items-center rounded-2xl transition ${active ? 'bg-[#F3F1FF] text-violet-600' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700'}`}>
+                  <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.4 : 2} />
+                  {badge ? <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-pink-500 px-1 text-[9px] font-extrabold text-white">{badge}</span> : null}
+                </button>
+              )
+            })}
           </div>
+          <div className="mt-auto"><Avatar name={profile?.display_name ?? 'Me'} src={profile?.avatar} size={44} ring={myGroup ? (myGroup.allSeen ? 'seen' : 'new') : 'none'} onClick={openProfile} label="Profile" /></div>
+        </nav>
 
-          <div className="px-4 pb-4">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/>
-              <input className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-3 pl-11 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50" placeholder="Search people or chats" value={search} onChange={e => setSearch(e.target.value)}/>
-            </div>
-            {search.trim().length >= 2 && (
-              <div className="mt-2 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-xl">
-                {searchResults.length ? searchResults.map(p => (
-                  <button key={p.id} type="button" onClick={() => void sendConnectionRequest(p)} disabled={creatingChat} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-violet-50 disabled:opacity-50">
-                    <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-pink-500 text-sm font-bold text-white">{p.username.slice(0,1).toUpperCase()}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{p.username}</span><span className="text-xs text-slate-400">Send connection request</span></span><Plus className="h-4 w-4 text-violet-600"/>
-                  </button>
-                )) : <p className="p-4 text-xs text-slate-400">No matching users found.</p>}
-              </div>
-            )}
-          </div>
-
-          <div className="px-5 pb-3">
-            <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-extrabold uppercase tracking-[.18em] text-slate-400">Your space</h2><span className="rounded-full bg-violet-50 px-2.5 py-1 text-[10px] font-bold text-violet-600">PRIVATE BY DESIGN</span></div>
-            <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100/80 p-1">
-              {(['chats','stories','requests'] as const).map(tab => (
-                <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-xl py-2.5 text-xs font-bold capitalize transition ${activeTab===tab?'bg-white text-violet-700 shadow-sm':'text-slate-500 hover:text-slate-800'}`}>{tab}{tab==='requests' && requests.filter(r=>r.direction==='incoming').length>0 ? <span className="ml-1 rounded-full bg-fuchsia-100 px-1.5 py-0.5 text-[9px] text-fuchsia-700">{requests.filter(r=>r.direction==='incoming').length}</span> : null}</button>
-              ))}
-            </div>
-          </div>
-
-          {activeTab === 'chats' ? (
-            <>
-              <div className="px-5 pb-3 pt-1">
-                <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-extrabold text-slate-800">Recent conversations</h3><span className="text-[11px] font-medium text-slate-400">{visibleConversations.length} chats</span></div>
-                <div className="flex gap-3 overflow-x-auto pb-1">
-                  <div className="flex w-[62px] shrink-0 flex-col items-center gap-1.5">
-                    <div className="relative grid h-[54px] w-[54px] place-items-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 p-[2px]"><div className="grid h-full w-full place-items-center rounded-full border-2 border-white bg-white text-xl font-bold text-violet-600">{(profile?.username?.[0] || 'Y').toUpperCase()}</div><span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-violet-600 text-white"><Plus className="h-3 w-3"/></span></div>
-                    <span className="w-full truncate text-center text-[10px] font-semibold text-slate-500">Your story</span>
-                  </div>
-                  {visibleConversations.filter(c=>c.type==='direct' && c.otherProfile).slice(0,8).map(c => (
-                    <button key={c.id} type="button" onClick={() => openConversation(c.id)} className="flex w-[62px] shrink-0 flex-col items-center gap-1.5">
-                      <span className="grid h-[54px] w-[54px] place-items-center rounded-full bg-gradient-to-tr from-amber-400 via-fuchsia-500 to-violet-600 p-[2px]"><span className="grid h-full w-full place-items-center rounded-full border-2 border-white bg-slate-100 text-sm font-extrabold text-slate-600">{(c.otherProfile?.username?.[0] || '?').toUpperCase()}</span></span>
-                      <span className="w-full truncate text-center text-[10px] font-semibold text-slate-500">{c.otherProfile?.username}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="mx-5 border-t border-slate-100"/>
-              <div className="flex-1 overflow-y-auto px-2 py-2">
-                {visibleConversations.length===0 && <div className="px-7 py-12 text-center"><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-violet-50 text-violet-500"><MessageCircle className="h-7 w-7"/></div><p className="text-sm font-bold text-slate-700">Your conversations start here</p><p className="mt-1 text-xs leading-5 text-slate-400">Search a username above to connect and start a private chat.</p></div>}
-                {visibleConversations.map(c => {
-                  const name=displayName(c)
-                  const online=c.otherProfile ? onlineIds.has(c.otherProfile.id) : false
-                  return <button key={c.id} type="button" onClick={() => openConversation(c.id)} className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${activeId===c.id?'bg-violet-50':'hover:bg-slate-50'}`}>
-                    <span className="relative grid h-[50px] w-[50px] shrink-0 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-base font-black text-white">{name.slice(0,1).toUpperCase()}<span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-white text-emerald-500"><Lock className="h-3 w-3"/></span>{online && <span className="absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-400"/>}</span>
-                    <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-bold text-slate-800">{name}</span><span className="shrink-0 text-[10px] text-slate-400">{c.lastMessage ? formatDistanceToNow(new Date(c.lastMessage.created_at),{addSuffix:false}) : ''}</span></span><span className="mt-1 flex items-center gap-1.5 text-xs text-slate-400"><Lock className="h-3 w-3"/><span className="truncate">Private message · locked</span></span></span>
-                    <span className="h-2 w-2 rounded-full bg-violet-400 opacity-0 transition group-hover:opacity-100"/>
-                  </button>
-                })}
-              </div>
-            </>
-          ) : activeTab === 'stories' ? (
-            <div className="flex-1 overflow-y-auto p-5">
-              <div className="mb-5"><p className="text-xs font-bold uppercase tracking-[.18em] text-violet-500">Moments</p><h2 className="mt-1 text-2xl font-black tracking-tight">Stories</h2><p className="mt-1 text-sm text-slate-400">A little glimpse, shared with your circle.</p></div>
-              <div className="rounded-3xl bg-gradient-to-br from-violet-600 via-fuchsia-600 to-orange-400 p-[1px] shadow-lg shadow-fuchsia-100"><div className="rounded-[23px] bg-white p-5"><div className="flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-violet-50 text-xl font-black text-violet-600">{(profile?.username?.[0]||'Y').toUpperCase()}</div><div className="min-w-0 flex-1"><p className="text-sm font-extrabold">Your story</p><p className="text-xs text-slate-400">Share a moment with friends</p></div><Sparkles className="h-5 w-5 text-fuchsia-500"/></div><div className="mt-5 rounded-2xl bg-slate-50 px-4 py-5 text-center"><LockKeyhole className="mx-auto h-6 w-6 text-violet-500"/><p className="mt-2 text-sm font-bold text-slate-700">Private stories are coming next</p><p className="mt-1 text-xs leading-5 text-slate-400">This screen is ready for encrypted photo, video and text stories. No unencrypted story previews are shown.</p></div></div></div>
-              <p className="mt-5 text-[11px] leading-5 text-slate-400">Only people you connect with will belong in your private circle. Story publishing is not enabled on web yet.</p>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="mb-4"><p className="text-xs font-bold uppercase tracking-[.18em] text-violet-500">Your circle</p><h2 className="mt-1 text-xl font-black">Connection requests</h2></div>
-              {requests.length===0 && <div className="rounded-3xl bg-slate-50 p-8 text-center"><Users className="mx-auto h-8 w-8 text-slate-300"/><p className="mt-3 text-sm font-bold text-slate-600">All caught up</p><p className="mt-1 text-xs text-slate-400">New requests will appear here.</p></div>}
-              <div className="space-y-3">{requests.map(request=><div key={request.id} className="rounded-2xl border border-slate-100 p-4 shadow-sm"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-pink-500 font-bold text-white">{request.other_username.slice(0,1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">@{request.other_username}</p><p className="text-xs text-slate-400">{request.direction==='incoming'?'Wants to connect with you':'Waiting for acceptance'}</p></div></div><div className="mt-3 flex gap-2">{request.direction==='incoming'?<><button type="button" onClick={()=>void respondToRequest(request,'accept')} className="flex-1 rounded-xl bg-violet-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-violet-700">Accept & chat</button><button type="button" onClick={()=>void respondToRequest(request,'decline')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Decline</button></>:<button type="button" onClick={()=>void respondToRequest(request,'cancel')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel request</button>}</div></div>)}</div>
-            </div>
-          )}
-          <div className="border-t border-slate-100 p-4"><div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"><span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 font-black text-white">{(profile?.username?.[0]||'U').toUpperCase()}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">@{profile?.username??'…'}</span><span className="text-[10px] font-medium text-emerald-600">Your account is protected</span></span><button type="button" onClick={configurePersonalPin} className="rounded-xl border border-violet-100 bg-white px-3 py-2 text-[11px] font-bold text-violet-700">Set / Change PIN</button><ShieldCheck className="h-5 w-5 text-emerald-500"/></div></div>
+        <aside className={`${mainOnMobile ? 'hidden md:flex' : 'flex'} min-h-0 w-full flex-col md:w-[372px] md:shrink-0 md:border-r md:border-slate-100`}>
+          {listHeader}
+          {activeTab === 'chats' ? chatsList : activeTab === 'stories' ? storiesList : requestsList}
+          {bottomBar}
         </aside>
 
-        <main className={`${activeId || showPinSetup?'flex':'hidden md:flex'} relative min-w-0 flex-1 flex-col overflow-hidden bg-[#fbfbfe] newgen-chat-panel`}>
-          {showPinSetup ? (
-            <section className="flex flex-1 items-center justify-center overflow-y-auto p-5">
-              <div className="w-full max-w-[460px] rounded-[30px] border border-slate-100 bg-white p-7 shadow-[0_20px_70px_rgba(76,29,149,.08)]">
-                <button type="button" onClick={() => setShowPinSetup(false)} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-violet-700"><ArrowLeft className="h-4 w-4"/> Back</button>
-                <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-violet-100 to-fuchsia-100 text-violet-600"><ShieldCheck className="h-8 w-8"/></div>
-                <p className="text-center text-[10px] font-extrabold uppercase tracking-[.22em] text-violet-500">Account privacy</p>
-                <h1 className="mt-2 text-center text-2xl font-black tracking-tight">Create your personal passkey</h1>
-                <p className="mt-2 text-center text-sm leading-6 text-slate-400">This PIN belongs only to your account. You can use a different PIN from the person you chat with. To change it later, verify your security answer.</p>
-                <form onSubmit={savePersonalPin} className="mt-6 space-y-3">
-                  <label className="block text-left text-xs font-bold text-slate-600">New personal PIN</label>
-                  <input required type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={12} value={setupPin} onChange={e=>setSetupPin(e.target.value.replace(/\D/g,''))} placeholder="4–12 digits" className="pin-mask w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>
-                  <label className="block text-left text-xs font-bold text-slate-600">Confirm personal PIN</label>
-                  <input required type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" maxLength={12} value={setupPinConfirm} onChange={e=>setSetupPinConfirm(e.target.value.replace(/\D/g,''))} placeholder="Re-enter your PIN" className="pin-mask w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>
-                  <label className="block text-left text-xs font-bold text-slate-600">Security question</label>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm text-slate-600">What was the name of your first school?</div>
-                  <input required type="text" autoComplete="off" value={setupSecurityAnswer} onChange={e=>setSetupSecurityAnswer(e.target.value)} placeholder="Your saved security answer" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-sm outline-none focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-50"/>
-                  {setupPinError && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-left text-xs text-rose-600">{setupPinError}</p>}
-                  <button type="submit" disabled={savingPin} className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-violet-200 disabled:opacity-50">{savingPin?'Saving securely…':'Save personal passkey'}</button>
-                </form>
-                <p className="mt-4 text-center text-[10px] leading-4 text-slate-400">Your PIN is stored as a one-way hash and is never displayed again.</p>
-              </div>
-            </section>
-          ) : !activeConv ? (
-            <div className="flex flex-1 items-center justify-center p-8">
-              <div className="max-w-md text-center"><div className="mx-auto mb-6 grid h-24 w-24 place-items-center rounded-[32px] bg-gradient-to-br from-violet-100 to-pink-100 text-violet-600"><MessageCircle className="h-10 w-10"/></div><p className="text-xs font-extrabold uppercase tracking-[.24em] text-violet-500">Welcome to your private space</p><h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900">Good conversations.<br/>Better boundaries.</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-400">Choose a chat to continue, or find someone new and build your circle. Your messages stay locked until you unlock them.</p><div className="mt-6 inline-flex items-center gap-2 rounded-full border border-violet-100 bg-white px-4 py-2 text-xs font-semibold text-violet-600 shadow-sm"><ShieldCheck className="h-4 w-4"/> Privacy-first by design</div></div>
-            </div>
-          ) : (
-            <>
-              <header className="newgen-chat-header z-10 flex min-h-[78px] shrink-0 items-center gap-3 border-b border-slate-100 bg-white/90 px-4 backdrop-blur-xl md:px-7">
-                <button type="button" onClick={leaveConversation} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Back"><ArrowLeft className="h-5 w-5"/></button>
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-lg font-black text-white">{displayName(activeConv).slice(0,1).toUpperCase()}</span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-extrabold text-slate-900">{displayName(activeConv)}</span><span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400"><span className={`h-1.5 w-1.5 rounded-full ${activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'bg-emerald-400':'bg-slate-300'}`}/>{isUnlocked?'Unlocked on this device':activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'Online':'Private conversation · locked'}</span></span>
-                <div className="flex items-center gap-1"><button type="button" title="Audio calls are not available yet" aria-disabled="true" disabled className="hidden cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60 sm:block"><Circle className="h-4 w-4"/></button><button type="button" onClick={()=>isUnlocked?lockChat():setShowPasskeyDialog(true)} className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-extrabold transition ${isUnlocked?'bg-emerald-50 text-emerald-700':'bg-violet-50 text-violet-700 hover:bg-violet-100'}`}>{isUnlocked?<ShieldCheck className="h-4 w-4"/>:<Lock className="h-4 w-4"/>}{isUnlocked?'Unlocked':'Unlock chat'}</button><button type="button" title="More options are not available yet" aria-disabled="true" disabled className="cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60"><MoreHorizontal className="h-5 w-5"/></button></div>
-              </header>
-              {!isUnlocked ? (
-                <>
-                  <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
-                    <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-violet-500"/> Your private messages are masked</div>
-                    {messages.map(m=><div key={m.id} className={`flex ${m.sender_id===user?.id?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm ${m.sender_id===user?.id?'rounded-br-md bg-violet-100 text-violet-900':'rounded-bl-md border border-slate-100 bg-white text-slate-500'}`}><div className="text-sm tracking-[.18em]">✦ ✦ ✦ ✦ ✦ ✦</div><div className="mt-1 text-right text-[10px] text-slate-400">{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}</div></div></div>)}
-                    {messages.length===0 && <div className="m-auto rounded-3xl bg-white p-8 text-center shadow-sm"><LockKeyhole className="mx-auto h-8 w-8 text-violet-500"/><p className="mt-3 text-sm font-bold text-slate-700">Your private room</p><p className="mt-1 text-xs text-slate-400">Messages will appear here, hidden until you unlock them.</p></div>}
-                    <div ref={bottomRef}/>
-                  </div>
-                  <div className="shrink-0 border-t border-slate-100 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                    {showPasskeyDialog ? <form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mx-auto max-w-lg space-y-2">
-                      <p className="text-center text-sm font-extrabold text-slate-800">Unlock original messages</p>
-                      <input type="text" inputMode="numeric" autoComplete="off" data-lpignore="true" data-1p-ignore="true" value={personalPinEntry} onChange={e=>setPersonalPinEntry(e.target.value.replace(/\D/g,''))} placeholder="Your personal PIN (4–12 digits)" className="pin-mask w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-violet-300"/>
-                      {passkeyError&&<p role="alert" className="text-xs text-rose-600">{passkeyError}</p>}
-                      <div className="flex gap-2"><button type="button" onClick={()=>{setShowPasskeyDialog(false);setPersonalPinEntry('');setPasskeyError('')}} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="flex-1 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3 text-sm font-extrabold text-white">Unlock messages</button></div>
-                    </form> : <button type="button" onClick={()=>setShowPasskeyDialog(true)} className="mx-auto flex w-full max-w-lg items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 py-3.5 text-sm font-extrabold text-white"><LockKeyhole className="h-4 w-4"/> Enter personal PIN to view messages</button>}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-6 md:px-8" style={{backgroundImage:'radial-gradient(#e9e7f2 0.7px, transparent 0.7px)',backgroundSize:'20px 20px'}}>
-                    <div className="mx-auto mb-2 flex items-center gap-2 rounded-full border border-slate-100 bg-white/90 px-4 py-2 text-[10px] font-semibold text-slate-400 shadow-sm"><Lock className="h-3 w-3 text-violet-500"/> Messages decrypt only on this device</div>
-                    {messages.map(m=>{const mine=m.sender_id===user?.id;return <div key={m.id} className={`message-enter flex ${mine?'justify-end':'justify-start'}`}><div className={`max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}><div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??(m.decryptError?'Old message (sent before PIN-only unlock) — cannot be shown':'✦ ✦ ✦ ✦ ✦ ✦')}</span></div><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>{formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}{mine&&<ShieldCheck className="h-3 w-3"/>}</div></div></div>})}
-                    <div ref={bottomRef}/>
-                  </div>
-                  <div className="shrink-0 border-t border-slate-100 bg-white/95 px-3 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:px-7 md:py-4">
-                    <form className="mx-auto flex max-w-5xl items-center gap-2 rounded-[22px] border border-slate-200 bg-slate-50 p-2 focus-within:border-violet-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-violet-50" onSubmit={e=>{e.preventDefault();void sendMessage()}}>
-                      <button type="button" aria-disabled="true" disabled className="cursor-not-allowed rounded-xl p-2.5 text-slate-300 opacity-60" title="Attachments are not enabled on web yet"><ImageIcon className="h-5 w-5"/></button>
-                      <input className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm outline-none placeholder:text-slate-400" placeholder="Write a private message…" value={input} onChange={e=>setInput(e.target.value)} disabled={sending}/>
-                      <button type="submit" disabled={sending||!input.trim()} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white shadow-md shadow-violet-200 transition hover:scale-[1.03] disabled:opacity-40"><Send className="h-4 w-4"/></button>
-                    </form>
-                    <p className="mt-2 text-center text-[9px] font-medium tracking-wide text-slate-300">PRIVATE BY DESIGN · UNLOCKED ONLY ON YOUR DEVICE</p>
-                  </div>
-                </>
-              )}
-            </>
-          )}
+        <main className={`${mainOnMobile ? 'flex' : 'hidden md:flex'} min-h-0 min-w-0 flex-1 flex-col`}>
+          {panel === 'pin' ? pinSetup : panel === 'profile' ? <ProfilePanel onBack={() => setPanel(null)} onOpenPin={openPinSetup} /> : activeConv ? chatView : emptyMain}
         </main>
       </div>
+
+      {composerOpen && <StoryComposer onClose={() => setComposerOpen(false)} onPosted={() => { notify('Story shared'); void loadStories() }} />}
+      {viewerStart !== null && user && (
+        <StoryViewer groups={storyGroups} startIndex={viewerStart} meId={user.id} onClose={() => setViewerStart(null)} onSeen={markSeen} onDeleted={() => void loadStories()} />
+      )}
+      {notice && <div role="status" className={`toast-enter fixed left-1/2 top-4 z-[60] max-w-[90vw] -translate-x-1/2 rounded-full px-5 py-3 text-sm font-bold shadow-xl ${notice.kind === 'ok' ? 'bg-slate-900 text-white' : 'bg-rose-600 text-white'}`}>{notice.text}</div>}
     </div>
   )
 }

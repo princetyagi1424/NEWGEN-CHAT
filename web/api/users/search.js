@@ -18,13 +18,13 @@ export default async function handler(req, res) {
       return sendError(res, 401, 'Session expired; please sign in again')
     }
     const { data: users, error } = await db.from('app_users')
-      .select('id,username')
+      .select('id,username,display_name,avatar_data')
       .ilike('username', `%${q}%`)
       .neq('id', token.sub)
       .order('username', { ascending: true })
       .limit(20)
     if (error) throw error
-    return res.status(200).json({ users: users || [] })
+    return res.status(200).json({ users: (users || []).map(u => ({ id: u.id, username: u.username, display_name: u.display_name || u.username, avatar: u.avatar_data || null })) })
   } catch (error) {
     console.error('User search API error:', error?.code || error?.name || 'user_search_failed')
     return sendError(res, 500, 'User search is temporarily unavailable')

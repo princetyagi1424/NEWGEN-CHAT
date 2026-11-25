@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/api/auth/logout-all", "destination": "/api/auth/logout?all=1" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

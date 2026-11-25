@@ -21,15 +21,18 @@ export default async function handler(req, res) {
       if (error) throw error
       const ids = [...new Set((data || []).flatMap(row => [row.requester_id, row.recipient_id]).filter(id => id !== user.id))]
       const { data: people, error: peopleError } = ids.length
-        ? await db.from('app_users').select('id,username').in('id', ids)
+        ? await db.from('app_users').select('id,username,display_name,avatar_data').in('id', ids)
         : { data: [], error: null }
       if (peopleError) throw peopleError
       const names = new Map((people || []).map(person => [person.id, person.username]))
+      const people_by_id = new Map((people || []).map(person => [person.id, person]))
       return res.status(200).json({
         requests: (data || []).map(row => ({
           ...row,
           other_user_id: row.requester_id === user.id ? row.recipient_id : row.requester_id,
           other_username: names.get(row.requester_id === user.id ? row.recipient_id : row.requester_id) || 'unknown',
+          other_display_name: people_by_id.get(row.requester_id === user.id ? row.recipient_id : row.requester_id)?.display_name || names.get(row.requester_id === user.id ? row.recipient_id : row.requester_id) || 'unknown',
+          other_avatar: people_by_id.get(row.requester_id === user.id ? row.recipient_id : row.requester_id)?.avatar_data || null,
           direction: row.recipient_id === user.id ? 'incoming' : 'outgoing',
         })),
       })

@@ -12,6 +12,19 @@ export default async function handler(req, res) {
       .eq('id', token.sub)
       .maybeSingle()
     if (error) throw error
+    // /api/auth/logout-all is rewritten here with ?all=1 to stay within the serverless function limit.
+    if (req.query?.all === '1') {
+      if (!user || Number(user.token_version) !== Number(token.ver || 0) || await isTokenRevoked(db, token)) {
+        return sendError(res, 401, 'Session expired; sign in again')
+      }
+      const { error: bumpError } = await db.from('app_users')
+        .update({ token_version: Number(user.token_version || 0) + 1 })
+        .eq('id', user.id)
+      if (bumpError) throw bumpError
+      const { error: clearError } = await db.from('revoked_tokens').delete().eq('user_id', user.id)
+      if (clearError) throw clearError
+      return res.status(204).end()
+    }
     if (!user || Number(user.token_version) !== Number(token.ver || 0)) return res.status(204).end()
     if (await isTokenRevoked(db, token)) return res.status(204).end()
 

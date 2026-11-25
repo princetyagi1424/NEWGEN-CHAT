@@ -4,10 +4,13 @@ import { clearLocalData, getOrCreateDeviceIdentity } from './localStore'
 export interface AppUser {
   id: string
   username: string
+  display_name?: string
+  avatar?: string | null
 }
+export interface ProfilePatch { display_name?: string | null; avatar?: string | null }
 interface AuthState {
   user: AppUser | null
-  profile: { id: string; username: string; display_name: string | null } | null
+  profile: { id: string; username: string; display_name: string; avatar: string | null } | null
   loading: boolean
   configured: boolean
   signUp: (username: string, password: string, securityAnswer: string) => Promise<{ error: string | null }>
@@ -15,6 +18,7 @@ interface AuthState {
   signOut: () => Promise<void>
   signOutAll: () => Promise<void>
   refreshProfile: () => Promise<void>
+  updateProfile: (patch: ProfilePatch) => Promise<void>
 }
 const AuthContext = createContext<AuthState | null>(null)
 const API_URL = (((import.meta as any).env?.VITE_API_URL as string | undefined) || '').replace(/\/$/, '')
@@ -30,6 +34,10 @@ async function authRequest(path: string, body: unknown) {
   const data = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(data.error || 'Authentication failed. Please try again.')
   return data
+}
+
+function savedShape(user: AppUser) {
+  return JSON.stringify({ id: user.id, username: user.username })
 }
 
 function readSavedUser(): AppUser | null {
@@ -59,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!response.ok) throw new Error('Session expired')
         const data = await response.json()
         setUser(data.user)
-        sessionStorage.setItem(USER_KEY, JSON.stringify(data.user))
+        sessionStorage.setItem(USER_KEY, savedShape(data.user))
       })
       .catch(() => {
         sessionStorage.removeItem(TOKEN_KEY)
@@ -69,6 +77,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const loadFullProfile = useCallback(async (token: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/me`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!response.ok) return
+      const data = await response.json()
+      setUser(data.user)
+    } catch { /* the basic identity from sign-in is enough to continue */ }
+  }, [])
+
   const signUp = useCallback(async (username: string, password: string, securityAnswer: string) => {
     try {
       if (!/^[a-zA-Z0-9_]{3,24}$/.test(username.trim())) throw new Error('Username must be 3–24 letters, numbers, or underscores.')
@@ -76,8 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await authRequest('/api/auth/register', { username: username.trim(), password, securityAnswer })
       const nextUser = data.user as AppUser
       sessionStorage.setItem(TOKEN_KEY, data.token)
-      sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      sessionStorage.setItem(USER_KEY, savedShape(nextUser))
       setUser(nextUser)
+      void loadFullProfile(data.token)
       // Register this browser's device identity locally; server-side device-key
       // registration will be connected with the account security workflow.
       await getOrCreateDeviceIdentity().catch(() => null)
@@ -92,8 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await authRequest('/api/auth/login', { username: username.trim(), password })
       const nextUser = data.user as AppUser
       sessionStorage.setItem(TOKEN_KEY, data.token)
-      sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      sessionStorage.setItem(USER_KEY, savedShape(nextUser))
       setUser(nextUser)
+      void loadFullProfile(data.token)
       await getOrCreateDeviceIdentity().catch(() => null)
       return { error: null }
     } catch (error) {
@@ -137,9 +156,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null)
     }
   }, [])
-  const refreshProfile = useCallback(async () => {}, [])
-  const profile = user ? { id: user.id, username: user.username, display_name: user.username } : null
-  const value = useMemo(() => ({ user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile }), [user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile])
+  const refreshProfile = useCallback(async () => {
+    const token = sessionStorage.getItem(TOKEN_KEY)
+    if (token) await loadFullProfile(token)
+  }, [loadFullProfile])
+  const updateProfile = useCallback(async (patch: ProfilePatch) => {
+    const token = sessionStorage.getItem(TOKEN_KEY)
+    if (!token) throw new Error('Please sign in again')
+    const response = await fetch(`${API_URL}/api/me`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.error || 'Could not save your profile.')
+    setUser(data.user)
+  }, [])
+  const profile = useMemo(() => user ? {
+    id: user.id,
+    username: user.username,
+    display_name: user.display_name || user.username,
+    avatar: user.avatar ?? null,
+  } : null, [user])
+  const value = useMemo(() => ({ user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile, updateProfile }), [user, profile, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile, updateProfile])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
