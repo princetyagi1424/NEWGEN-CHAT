@@ -31,7 +31,6 @@ export default function Landing() {
               <p className="mt-7 max-w-xl text-base leading-8 text-slate-500 md:text-lg">A fresh place to chat, connect and keep your conversations close.</p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Link to={user ? '/app' : '/auth'} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-700 via-fuchsia-600 to-pink-500 px-7 py-4 text-sm font-extrabold text-white shadow-xl shadow-fuchsia-200/70"><MessageCircle className="h-5 w-5"/>Start chatting<ArrowUpRight className="h-4 w-4"/></Link>
-                <InstallAppButton className="inline-flex items-center justify-center gap-2 rounded-2xl border-2 border-violet-300 bg-white px-7 py-4 text-sm font-extrabold text-violet-800 shadow-sm" label="Download / Install app" />
                 <a href="#features" className="inline-flex items-center justify-center gap-2 rounded-2xl border border-violet-100 bg-white px-7 py-4 text-sm font-bold text-slate-700">Explore features</a>
               </div>
               {!configured && <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">Supabase is not configured.</p>}
@@ -68,7 +67,7 @@ export default function Landing() {
           </div>
         </section>
       </main>
-      <footer className="border-t border-violet-100 bg-white px-5 py-8 pb-28 text-center text-xs font-semibold text-slate-400">NEWGEN CHAT · A private space to connect</footer>
+      <footer className="border-t border-violet-100 bg-white px-5 py-8 text-center text-xs font-semibold text-slate-400">NEWGEN CHAT · A private space to connect</footer>
     </div>
   )
 }

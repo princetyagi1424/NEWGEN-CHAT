@@ -1,9 +1,7 @@
 /**
  * Shared PWA install bridge.
- * Captures beforeinstallprompt as early as possible so Install buttons
- * can call the native install dialog with one tap (Chrome / Edge / Android).
- *
- * iOS Safari has no install API — callers must show Add-to-Home-Screen steps.
+ * Captures the browser's native install event before React mounts so the
+ * single Install button can open the real app installer from a user gesture.
  */
 
 type InstallChoice = { outcome: 'accepted' | 'dismissed'; platform: string }
@@ -14,14 +12,15 @@ export type BeforeInstallPromptEvent = Event & {
 }
 
 let deferred: BeforeInstallPromptEvent | null = null
+let initialized = false
 const listeners = new Set<() => void>()
 
 function notify() {
-  for (const fn of listeners) {
+  for (const listener of listeners) {
     try {
-      fn()
+      listener()
     } catch {
-      /* ignore */
+      // A UI subscriber must not break install event handling.
     }
   }
 }
@@ -35,7 +34,7 @@ export function isStandaloneMode() {
     if (window.matchMedia('(display-mode: minimal-ui)').matches) return true
     if (window.matchMedia('(display-mode: window-controls-overlay)').matches) return true
   } catch {
-    /* ignore */
+    // Older browsers may not support matchMedia display-mode queries.
   }
   return nav.standalone === true
 }
@@ -49,23 +48,22 @@ export function isAppleMobile() {
 
 export function isInAppBrowser() {
   if (typeof window === 'undefined') return false
-  return /FBAN|FBAV|Instagram|Line\/|; wv\)/i.test(window.navigator.userAgent || '')
+  return /FBAN|FBAV|Instagram|Line\/|; wv\)|WhatsApp|Snapchat|TikTok/i.test(window.navigator.userAgent || '')
 }
 
 export function canNativeInstall() {
-  return deferred != null && !isStandaloneMode()
+  return deferred !== null && !isStandaloneMode()
 }
 
-export function subscribeInstallAvailability(cb: () => void) {
-  listeners.add(cb)
-  return () => {
-    listeners.delete(cb)
-  }
+export function subscribeInstallAvailability(callback: () => void) {
+  listeners.add(callback)
+  return () => listeners.delete(callback)
 }
 
-/** Call once at app boot (main.tsx) before React mounts if possible. */
+/** Must be called once before React mounts so no native prompt event is missed. */
 export function initPwaInstallCapture() {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined' || initialized) return
+  initialized = true
 
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault()
@@ -83,25 +81,23 @@ export type TriggerInstallResult =
   | { ok: true; outcome: 'accepted' | 'dismissed' }
   | { ok: false; reason: 'standalone' | 'ios' | 'in_app_browser' | 'unavailable' | 'error'; message: string }
 
-/**
- * One-tap install: opens the browser's native install UI when available.
- */
+/** Opens the browser's actual native PWA installer. */
 export async function triggerInstall(): Promise<TriggerInstallResult> {
   if (isStandaloneMode()) {
-    return { ok: false, reason: 'standalone', message: 'App is already installed.' }
+    return { ok: false, reason: 'standalone', message: 'NEWGEN CHAT is already installed.' }
   }
   if (isInAppBrowser()) {
     return {
       ok: false,
       reason: 'in_app_browser',
-      message: 'Open this page in Chrome or Safari, then tap Install.',
+      message: 'This browser is embedded inside another app and cannot install the PWA. Open the HTTPS website directly in Chrome or Safari.',
     }
   }
   if (isAppleMobile()) {
     return {
       ok: false,
       reason: 'ios',
-      message: 'On iPhone, use Share → Add to Home Screen.',
+      message: 'iPhone Safari does not expose a one-tap PWA install API. Use the Share menu and select Add to Home Screen.',
     }
   }
 
@@ -110,24 +106,25 @@ export async function triggerInstall(): Promise<TriggerInstallResult> {
     return {
       ok: false,
       reason: 'unavailable',
-      message:
-        'Install is not ready yet. Wait a moment, refresh the page, or use the browser menu → Install app.',
+      message: 'Chrome has not offered the native app installer on this visit. Open the HTTPS site directly in the latest Chrome, let the page finish loading, refresh once and tap Install again.',
     }
   }
 
-  // beforeinstallprompt is single-use
-  deferred = null
-  notify()
-
   try {
-    await event.prompt()
+    // Call prompt immediately in the click's user-activation context.
+    const promptPromise = event.prompt()
+    deferred = null // beforeinstallprompt is single-use
+    notify()
+    await promptPromise
     const choice = await event.userChoice
     return { ok: true, outcome: choice.outcome }
   } catch {
+    deferred = null
+    notify()
     return {
       ok: false,
       reason: 'error',
-      message: 'Could not open the install dialog. Try the browser menu → Install app.',
+      message: 'Chrome could not open the native installer. Refresh the HTTPS page and try again.',
     }
   }
 }

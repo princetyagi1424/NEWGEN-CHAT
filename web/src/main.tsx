@@ -4,8 +4,17 @@ import './index.css'
 import App from './App.tsx'
 import { initPwaInstallCapture } from './lib/pwaInstall'
 
-// Capture install prompt ASAP so Install buttons can open the native dialog.
+// Capture the native installation event before registering the worker or mounting React.
 initPwaInstallCapture()
+
+// Register the PWA worker immediately instead of waiting for window.load.
+// This lets Chrome evaluate installability as early as possible on the first visit.
+if ('serviceWorker' in navigator) {
+  void navigator.serviceWorker
+    .register('/sw.js', { scope: '/' })
+    .then(registration => registration.update())
+    .catch(error => console.warn('[NEWGEN] SW registration failed:', error))
+}
 
 class RootErrorBoundary extends Component<
   { children: ReactNode },
@@ -77,18 +86,3 @@ createRoot(rootElement).render(
     </RootErrorBoundary>
   </StrictMode>,
 )
-
-// Register SW early so the site becomes installable quickly.
-if ('serviceWorker' in navigator) {
-  const registerServiceWorker = () => {
-    navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
-      .then(registration => {
-        void registration.update()
-      })
-      .catch(error => console.warn('[NEWGEN] SW registration failed:', error))
-  }
-
-  if (document.readyState === 'complete') registerServiceWorker()
-  else window.addEventListener('load', registerServiceWorker, { once: true })
-}

@@ -1,31 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Download, MessageCircle, Smartphone, X } from 'lucide-react'
 import {
-  canNativeInstall,
   isAppleMobile,
   isInAppBrowser,
   isStandaloneMode,
   subscribeInstallAvailability,
   triggerInstall,
 } from '../lib/pwaInstall'
-
-const DISMISSED_KEY = 'newgen-chat-pwa-install-dismissed-v2'
-
-function readDismissed() {
-  try {
-    return window.sessionStorage.getItem(DISMISSED_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-function rememberDismissed() {
-  try {
-    window.sessionStorage.setItem(DISMISSED_KEY, 'true')
-  } catch {
-    /* ignore */
-  }
-}
 
 function InstallHelpDialog({
   appleDevice,
@@ -35,7 +16,7 @@ function InstallHelpDialog({
 }: {
   appleDevice: boolean
   inAppBrowser: boolean
-  message?: string
+  message: string
   onClose: () => void
 }) {
   return (
@@ -58,16 +39,9 @@ function InstallHelpDialog({
               <Smartphone className="h-5 w-5" />
             </span>
             <h2 id="pwa-install-title" className="text-lg font-black text-slate-900">
-              Install NEWGEN
+              Install NEWGEN CHAT
             </h2>
-            {message && <p className="mt-2 text-sm font-medium text-violet-800">{message}</p>}
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              {inAppBrowser
-                ? 'Open this page in Chrome or Safari first.'
-                : appleDevice
-                  ? 'iPhone does not allow one-tap install. Use Share → Add to Home Screen.'
-                  : 'If the install window did not open, use the browser menu → Install app.'}
-            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-2 text-slate-500 hover:bg-slate-100">
             <X className="h-5 w-5" />
@@ -76,22 +50,21 @@ function InstallHelpDialog({
 
         {appleDevice && !inAppBrowser && (
           <ol className="space-y-3 text-sm leading-6 text-slate-700">
-            <li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-black text-violet-800">1</span><span>Tap <strong>Share</strong> in Safari.</span></li>
+            <li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-black text-violet-800">1</span><span>Open the <strong>Share</strong> menu in Safari.</span></li>
             <li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-black text-violet-800">2</span><span>Choose <strong>Add to Home Screen</strong>.</span></li>
             <li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-black text-violet-800">3</span><span>Tap <strong>Add</strong>.</span></li>
           </ol>
         )}
 
-        {!appleDevice && !inAppBrowser && (
-          <ol className="space-y-3 text-sm leading-6 text-slate-700">
-            <li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-black text-violet-800">1</span><span>Tap the <strong>⋮</strong> menu in Chrome.</span></li>
-            <li className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-black text-violet-800">2</span><span>Choose <strong>Install app</strong> / <strong>Add to Home screen</strong>.</span></li>
-          </ol>
-        )}
-
         {inAppBrowser && (
           <div className="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-            Open in <strong>Chrome</strong> or <strong>Safari</strong>, then tap Install again.
+            Open the website directly in <strong>Chrome</strong> (Android) or <strong>Safari</strong> (iPhone), then use the single Install button again.
+          </div>
+        )}
+
+        {!appleDevice && !inAppBrowser && (
+          <div className="rounded-2xl bg-violet-50 p-4 text-sm leading-6 text-violet-900">
+            For a real app installation, open the HTTPS website directly in the latest <strong>Google Chrome</strong>. Chrome has not provided its native install dialog on this visit. Refresh the page after it loads completely, then tap Install again. The app will open in its own standalone window when installation is available.
           </div>
         )}
 
@@ -103,189 +76,76 @@ function InstallHelpDialog({
   )
 }
 
-async function runInstall(setHelp: (open: boolean) => void, setHelpMessage: (msg: string) => void, setStatus: (s: string) => void) {
-  const result = await triggerInstall()
-  if (result.ok) {
-    if (result.outcome === 'accepted') {
-      setStatus('Installing… Open NEWGEN from your home screen when ready.')
-    } else {
-      setStatus('Install cancelled. Tap Install again anytime.')
-    }
-    return
-  }
-  // Only show instructions when native prompt truly cannot run
-  setHelpMessage(result.message)
-  setHelp(true)
-}
-
-export default function PwaInstallPrompt() {
+export function InstallAppButton({
+  className = '',
+  label = 'Install NEWGEN',
+}: {
+  className?: string
+  label?: string
+}) {
   const [standalone, setStandalone] = useState(isStandaloneMode)
-  const [dismissed, setDismissed] = useState(readDismissed)
-  const [nativeReady, setNativeReady] = useState(canNativeInstall)
   const [helpOpen, setHelpOpen] = useState(false)
   const [helpMessage, setHelpMessage] = useState('')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    const sync = () => {
-      setStandalone(isStandaloneMode())
-      setNativeReady(canNativeInstall())
-    }
-    const unsub = subscribeInstallAvailability(sync)
+    const sync = () => setStandalone(isStandaloneMode())
+    const unsubscribe = subscribeInstallAvailability(sync)
     window.addEventListener('appinstalled', sync)
     window.addEventListener('focus', sync)
-    sync()
+    window.addEventListener('pageshow', sync)
     return () => {
-      unsub()
+      unsubscribe()
       window.removeEventListener('appinstalled', sync)
       window.removeEventListener('focus', sync)
+      window.removeEventListener('pageshow', sync)
     }
   }, [])
 
-  const onInstallClick = useCallback(async () => {
+  if (standalone) return null
+
+  const appleDevice = isAppleMobile()
+  const inAppBrowser = isInAppBrowser()
+
+  async function handleInstall() {
     if (busy) return
     setBusy(true)
     setStatus('')
     try {
-      await runInstall(setHelpOpen, setHelpMessage, setStatus)
+      const result = await triggerInstall()
+      if (result.ok) {
+        setStatus(
+          result.outcome === 'accepted'
+            ? 'Installation accepted. NEWGEN CHAT will be available as an app.'
+            : 'Installation was cancelled. You can tap Install again.',
+        )
+        return
+      }
+      setHelpMessage(result.message)
+      setHelpOpen(true)
     } finally {
       setBusy(false)
-      setNativeReady(canNativeInstall())
     }
-  }, [busy])
-
-  if (standalone) return null
-  if (dismissed && !helpOpen) return null
-
-  const appleDevice = isAppleMobile()
-
-  return (
-    <>
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
-        <aside
-          className="pointer-events-auto w-full max-w-lg rounded-2xl border border-violet-200/90 bg-white p-3 shadow-[0_12px_40px_rgba(73,42,125,.22)] sm:p-4"
-          aria-label="Install NEWGEN CHAT"
-        >
-          <div className="flex items-start gap-3">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 via-fuchsia-500 to-orange-400 text-white shadow-md">
-              <MessageCircle className="h-5 w-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-extrabold text-slate-900">Install the app</p>
-              <p className="mt-0.5 text-xs leading-5 text-slate-600">
-                {appleDevice
-                  ? 'Add NEWGEN to your Home Screen.'
-                  : nativeReady
-                    ? 'Tap below — install starts immediately.'
-                    : 'Tap Install to add NEWGEN to your device.'}
-              </p>
-              {status && (
-                <p className="mt-1 text-xs font-medium text-violet-700" role="status">
-                  {status}
-                </p>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                rememberDismissed()
-                setDismissed(true)
-              }}
-              aria-label="Dismiss"
-              className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void onInstallClick()}
-            className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-700 via-fuchsia-600 to-pink-500 px-4 py-3 text-sm font-extrabold text-white shadow-sm disabled:opacity-70"
-          >
-            <Download className="h-4 w-4" />
-            {busy ? 'Opening install…' : appleDevice ? 'Add to Home Screen' : 'Install app now'}
-          </button>
-        </aside>
-      </div>
-
-      {helpOpen && (
-        <InstallHelpDialog
-          appleDevice={appleDevice}
-          inAppBrowser={isInAppBrowser()}
-          message={helpMessage}
-          onClose={() => setHelpOpen(false)}
-        />
-      )}
-    </>
-  )
-}
-
-export function InstallAppButton({
-  className = '',
-  label,
-}: {
-  className?: string
-  label?: string
-}) {
-  const [standalone, setStandalone] = useState(isStandaloneMode)
-  const [nativeReady, setNativeReady] = useState(canNativeInstall)
-  const [helpOpen, setHelpOpen] = useState(false)
-  const [helpMessage, setHelpMessage] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    const sync = () => {
-      setStandalone(isStandaloneMode())
-      setNativeReady(canNativeInstall())
-    }
-    const unsub = subscribeInstallAvailability(sync)
-    window.addEventListener('appinstalled', sync)
-    sync()
-    return () => {
-      unsub()
-      window.removeEventListener('appinstalled', sync)
-    }
-  }, [])
-
-  if (standalone) return null
-
-  const appleDevice = isAppleMobile()
-  const text =
-    label ||
-    (busy ? 'Installing…' : appleDevice ? 'Install app' : nativeReady ? 'Install app' : 'Install app')
+  }
 
   return (
     <>
       <button
         type="button"
         disabled={busy}
-        onClick={() => {
-          void (async () => {
-            if (busy) return
-            setBusy(true)
-            try {
-              const result = await triggerInstall()
-              if (!result.ok) {
-                setHelpMessage(result.message)
-                setHelpOpen(true)
-              }
-            } finally {
-              setBusy(false)
-              setNativeReady(canNativeInstall())
-            }
-          })()
-        }}
+        onClick={() => void handleInstall()}
+        aria-label="Install NEWGEN CHAT"
         className={className}
       >
         <Download className="h-4 w-4" />
-        {text}
+        {busy ? 'Opening installer…' : label}
       </button>
+      {status && <p className="sr-only" role="status">{status}</p>}
       {helpOpen && (
         <InstallHelpDialog
           appleDevice={appleDevice}
-          inAppBrowser={isInAppBrowser()}
+          inAppBrowser={inAppBrowser}
           message={helpMessage}
           onClose={() => setHelpOpen(false)}
         />
