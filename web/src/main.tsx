@@ -2,6 +2,10 @@ import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { initPwaInstallCapture } from './lib/pwaInstall'
+
+// Capture install prompt ASAP so Install buttons can open the native dialog.
+initPwaInstallCapture()
 
 class RootErrorBoundary extends Component<
   { children: ReactNode },
@@ -37,7 +41,7 @@ class RootErrorBoundary extends Component<
         >
           <h1 style={{ fontSize: 20, margin: 0 }}>Something went wrong</h1>
           <p style={{ margin: 0, color: '#829089', maxWidth: 320 }}>
-            The app hit an error on this device. Try reloading. If it stays blank, clear site data for this site and open again.
+            The app hit an error on this device. Try reloading.
           </p>
           <button
             type="button"
@@ -53,33 +57,6 @@ class RootErrorBoundary extends Component<
             }}
           >
             Reload
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                if ('serviceWorker' in navigator) {
-                  const regs = await navigator.serviceWorker.getRegistrations()
-                  await Promise.all(regs.map(reg => reg.unregister()))
-                }
-                if ('caches' in window) {
-                  const keys = await caches.keys()
-                  await Promise.all(keys.map(key => caches.delete(key)))
-                }
-              } catch {
-                /* ignore */
-              }
-              window.location.href = '/'
-            }}
-            style={{
-              padding: '10px 16px',
-              borderRadius: 12,
-              border: '1px solid #e7eeea',
-              background: '#fff',
-              color: '#17251f',
-            }}
-          >
-            Clear cache & restart
           </button>
         </div>
       )
@@ -101,38 +78,15 @@ createRoot(rootElement).render(
   </StrictMode>,
 )
 
-// Register the PWA worker after page load. Only the app shell and static
-// assets are cached; authenticated APIs, messages and signed media are not.
+// Register SW early so the site becomes installable quickly.
 if ('serviceWorker' in navigator) {
   const registerServiceWorker = () => {
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
       .then(registration => {
-        // Force update check so mobile does not stick on a broken cached shell.
         void registration.update()
-        const warmAppAssets = () => {
-          const controller = navigator.serviceWorker.controller
-          if (!controller) return
-          const urls = Array.from(
-            document.querySelectorAll<HTMLScriptElement | HTMLLinkElement>(
-              'script[src], link[rel="stylesheet"][href]',
-            ),
-          )
-            .map(element =>
-              element instanceof HTMLScriptElement ? element.src : element.href,
-            )
-            .filter(Boolean)
-          controller.postMessage({ type: 'PRECACHE_URLS', urls })
-        }
-
-        warmAppAssets()
-        navigator.serviceWorker.addEventListener('controllerchange', warmAppAssets, {
-          once: true,
-        })
       })
-      .catch(error =>
-        console.warn('[NEWGEN] PWA service worker registration failed:', error),
-      )
+      .catch(error => console.warn('[NEWGEN] SW registration failed:', error))
   }
 
   if (document.readyState === 'complete') registerServiceWorker()
