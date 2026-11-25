@@ -66,7 +66,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   box-shadow: 0 20px 65px rgb(30 56 44 / 9%);
 }
 .newgen-sidebar {
-  display: flex;
+  /* No display here: the JSX toggles `hidden md:flex` / `flex`. An unlayered display rule would
+     beat Tailwind's layered `hidden` and keep the list visible on phones. */
   flex: 0 0 360px;
   width: 360px;
   min-width: 0;
