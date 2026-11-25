@@ -6,40 +6,22 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#129970" />
+    <meta name="theme-color" content="#6d28d9" />
     <meta name="description" content="NEWGEN CHAT — Connect with your people in a private, installable messaging app." />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="NEWGEN CHAT" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="NEWGEN CHAT" />
     <title>NEWGEN CHAT</title>
     <style>
-      html, body, #root {
-        margin: 0;
-        width: 100%;
-        min-height: 100%;
-        min-height: 100dvh;
-      }
-      body {
-        background: #f4f7f5;
-        color: #17251f;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      #boot-fallback {
-        min-height: 100dvh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-        text-align: center;
-        color: #829089;
-      }
+      html, body, #root { margin: 0; width: 100%; min-height: 100%; min-height: 100dvh; }
+      body { background: #faf8ff; color: #211a35; font-family: system-ui, -apple-system, sans-serif; }
+      #boot-fallback { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: #829089; }
     </style>
   </head>
   <body>
-    <div id="root">
-      <div id="boot-fallback">Loading NEWGEN CHAT…</div>
-    </div>
+    <div id="root"><div id="boot-fallback">Loading NEWGEN CHAT…</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
