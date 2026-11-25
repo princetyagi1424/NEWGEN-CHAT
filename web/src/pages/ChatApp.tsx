@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import {
-  ArrowLeft, Lock, LockKeyhole, LogOut, MessageCircle, Search, Send, Users,
-  ShieldCheck, Plus
+  ArrowLeft, Bell, CircleDot, Lock, LockKeyhole, LogOut, MessageCircle, Search, Send, Users,
+  ShieldCheck, Plus, UserRound
 } from 'lucide-react'
 import { getAuthToken, useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -46,7 +46,7 @@ export default function ChatApp() {
   const [setupPinError, setSetupPinError] = useState('')
   const [savingPin, setSavingPin] = useState(false)
   const [creatingChat, setCreatingChat] = useState(false)
-  const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests'>('chats')
+  const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests' | 'profile'>('chats')
   const bottomRef = useRef<HTMLDivElement>(null)
   const messageRequestVersion = useRef(0)
   const messagesRef = useRef<VisibleMessage[]>([])
@@ -475,16 +475,11 @@ export default function ChatApp() {
               <div><div className="text-[21px] font-black tracking-tight">NEWGEN</div><div className="text-[10px] font-semibold uppercase tracking-[.22em] text-slate-400">Connect privately</div></div>
             </div>
             <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
-              <button type="button" onClick={() => void createGroup()} title="Create group" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-emerald-600"><Users className="h-5 w-5"/></button>
-              <button type="button" onClick={() => {
-                if (window.confirm('Log out this account on every device? All active sessions will be revoked.')) {
-                  void signOutAll().catch(error => window.alert(error instanceof Error ? error.message : 'Could not revoke all sessions.'))
-                }
-              }} title="Log out all devices" aria-label="Log out all devices" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-amber-600"><ShieldCheck className="h-5 w-5"/></button>
-              <button type="button" onClick={() => void signOut()} title="Sign out" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-rose-500"><LogOut className="h-5 w-5"/></button>
+              {activeTab === 'chats' && <button type="button" onClick={() => void createGroup()} title="Create group" className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-emerald-600"><Users className="h-5 w-5"/></button>}
             </div>
           </div>
 
+          {activeTab === 'chats' && (
           <div className="shrink-0 px-3 pb-3 sm:px-4">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/>
@@ -501,15 +496,7 @@ export default function ChatApp() {
               </div>
             )}
           </div>
-
-          <div className="shrink-0 px-4 pb-3 sm:px-5">
-            <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-extrabold uppercase tracking-[.18em] text-slate-400">Your space</h2><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-600">PRIVATE BY DESIGN</span></div>
-            <div className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100/80 p-1">
-              {(['chats','stories','requests'] as const).map(tab => (
-                <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-xl py-2.5 text-xs font-bold capitalize transition ${activeTab===tab?'bg-white text-emerald-700 shadow-sm':'text-slate-500 hover:text-slate-800'}`}>{tab}{tab==='requests' && requests.filter(r=>r.direction==='incoming').length>0 ? <span className="ml-1 rounded-full bg-teal-100 px-1.5 py-0.5 text-[9px] text-teal-700">{requests.filter(r=>r.direction==='incoming').length}</span> : null}</button>
-              ))}
-            </div>
-          </div>
+          )}
 
           {activeTab === 'chats' ? (
             <>
@@ -544,28 +531,61 @@ export default function ChatApp() {
             </>
           ) : activeTab === 'stories' ? (
             <StoriesHub />
-          ) : (
+          ) : activeTab === 'requests' ? (
             <div className="newgen-sidebar-list p-4 sm:p-5">
               <div className="mb-4"><p className="text-xs font-bold uppercase tracking-[.18em] text-emerald-500">Your circle</p><h2 className="mt-1 text-xl font-black">Connection requests</h2></div>
               {requests.length===0 && <div className="rounded-3xl bg-slate-50 p-8 text-center"><Users className="mx-auto h-8 w-8 text-slate-300"/><p className="mt-3 text-sm font-bold text-slate-600">All caught up</p><p className="mt-1 text-xs text-slate-400">New requests will appear here.</p></div>}
               <div className="space-y-3">{requests.map(request=><div key={request.id} className="rounded-2xl border border-slate-100 p-4 shadow-sm"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-emerald-500 to-pink-500 font-bold text-white">{request.other_username.slice(0,1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">@{request.other_username}</p><p className="text-xs text-slate-400">{request.direction==='incoming'?'Wants to connect with you':'Waiting for acceptance'}</p></div></div><div className="mt-3 flex gap-2">{request.direction==='incoming'?<><button type="button" onClick={()=>void respondToRequest(request,'accept')} className="flex-1 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700">Accept & chat</button><button type="button" onClick={()=>void respondToRequest(request,'decline')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Decline</button></>:<button type="button" onClick={()=>void respondToRequest(request,'cancel')} className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">Cancel request</button>}</div></div>)}</div>
             </div>
-          )}
-          <div className="shrink-0 border-t border-slate-100 bg-white p-3 sm:p-4">
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 font-black text-white">{profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" /> : (profile?.display_name?.[0] || profile?.username?.[0] || 'U').toUpperCase()}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-bold text-slate-800">{profile?.display_name || '@' + (profile?.username ?? '…')}</span>
-                  <span className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-emerald-700"><ShieldCheck className="h-3 w-3" /> Account protected</span>
+          ) : (
+            <div className="newgen-sidebar-list px-5 pb-5 pt-3">
+              <div className="flex flex-col items-center pt-4 text-center">
+                <span className="grid h-24 w-24 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-3xl font-black text-white ring-4 ring-emerald-50">
+                  {profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" /> : (profile?.display_name?.[0] || profile?.username?.[0] || 'U').toUpperCase()}
                 </span>
+                <h2 className="mt-4 max-w-full truncate text-xl font-black tracking-tight text-slate-900">{profile?.display_name || profile?.username || '…'}</h2>
+                <p className="text-sm text-slate-400">@{profile?.username ?? '…'}</p>
+                {profile?.bio ? <p className="mt-2 max-w-xs text-sm leading-5 text-slate-500">{profile.bio}</p> : null}
+                <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700"><ShieldCheck className="h-3.5 w-3.5" /> Account protected</span>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="mt-6 space-y-2">
                 <ProfileEditor />
-                <button type="button" onClick={configurePersonalPin} className="w-full rounded-xl border border-emerald-100 bg-white px-3 py-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50">Set / Change PIN</button>
+                <button type="button" onClick={configurePersonalPin} className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-100 bg-white px-3 py-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50"><Lock className="h-3.5 w-3.5" /> Set / Change PIN</button>
+                <div className="my-2 border-t border-slate-100" />
+                <button type="button" onClick={() => {
+                  if (window.confirm('Log out this account on every device? All active sessions will be revoked.')) {
+                    void signOutAll().catch(error => window.alert(error instanceof Error ? error.message : 'Could not revoke all sessions.'))
+                  }
+                }} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"><ShieldCheck className="h-3.5 w-3.5" /> Log out of all devices</button>
+                <button type="button" onClick={() => void signOut()} className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose-100 bg-white px-3 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50"><LogOut className="h-3.5 w-3.5" /> Log out</button>
               </div>
             </div>
-          </div>
+          )}
+
+          <nav aria-label="Main tabs" className="shrink-0 border-t border-slate-100 bg-white px-2 pt-1.5 pb-[max(.5rem,env(safe-area-inset-bottom))]">
+            <div className="grid grid-cols-4 gap-1">
+              {([
+                { tab: 'chats', label: 'Chats' },
+                { tab: 'stories', label: 'Stories' },
+                { tab: 'requests', label: 'Requests' },
+                { tab: 'profile', label: 'Profile' },
+              ] as const).map(({ tab, label }) => {
+                const active = activeTab === tab
+                const incoming = tab === 'requests' ? requests.filter(r => r.direction === 'incoming').length : 0
+                return (
+                  <button key={tab} type="button" aria-current={active ? 'page' : undefined} onClick={() => { setActiveTab(tab); setShowPinSetup(false) }} className={`relative flex flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[11px] font-bold transition ${active ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}>
+                    {tab === 'chats' ? <MessageCircle className="h-[22px] w-[22px]" strokeWidth={active ? 2.5 : 2} />
+                      : tab === 'stories' ? <CircleDot className="h-[22px] w-[22px]" strokeWidth={active ? 2.5 : 2} />
+                      : tab === 'requests' ? <Bell className="h-[22px] w-[22px]" strokeWidth={active ? 2.5 : 2} />
+                      : profile?.avatar_url ? <img src={profile.avatar_url} alt="" className={`h-[22px] w-[22px] rounded-full object-cover ${active ? 'ring-2 ring-emerald-500' : ''}`} />
+                      : <UserRound className="h-[22px] w-[22px]" strokeWidth={active ? 2.5 : 2} />}
+                    {label}
+                    {incoming > 0 ? <span className="absolute right-[22%] top-0 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold text-white">{incoming}</span> : null}
+                  </button>
+                )
+              })}
+            </div>
+          </nav>
         </aside>
 
         <main aria-label="Chat workspace" className={`${activeId || showPinSetup?'flex':'hidden md:flex'} relative min-w-0 min-h-0 flex-1 flex-col overflow-hidden newgen-chat-panel`}>
