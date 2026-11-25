@@ -195,3 +195,49 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     transition-duration: .01ms !important;
   }
 }
+
+/* Mobile bottom navigation — isolated to the app's four primary tabs. */
+.newgen-mobile-nav { display: none; }
+.newgen-mobile-nav-button {
+  min-height: 54px;
+  border: 1px solid transparent;
+  -webkit-tap-highlight-color: transparent;
+  transition: color .22s ease, background-color .22s ease, transform .22s ease, border-color .22s ease;
+}
+.newgen-mobile-nav-button:active { transform: scale(.94); }
+.newgen-mobile-nav-button[aria-current="page"] .newgen-mobile-nav-icon {
+  background: linear-gradient(135deg, rgb(16 185 129 / 15%), rgb(20 184 166 / 13%));
+  animation: newgen-tab-pop .28s cubic-bezier(.2,.8,.2,1);
+}
+.newgen-mobile-nav-icon { transition: background-color .22s ease, transform .22s ease; }
+@keyframes newgen-tab-pop {
+  0% { opacity: .65; transform: translateY(3px) scale(.78); }
+  65% { opacity: 1; transform: translateY(-2px) scale(1.12); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (max-width: 767px) {
+  .newgen-app-frame {
+    height: calc(100dvh - 76px - env(safe-area-inset-bottom));
+  }
+  .newgen-mobile-nav {
+    position: fixed;
+    z-index: 50;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 7px 10px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid rgb(226 232 240 / 90%);
+    background: rgb(255 255 255 / 94%);
+    box-shadow: 0 -8px 28px rgb(15 23 42 / 7%);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .newgen-mobile-nav-button,
+  .newgen-mobile-nav-icon { transition: none; }
+  .newgen-mobile-nav-button[aria-current="page"] .newgen-mobile-nav-icon { animation: none; }
+}

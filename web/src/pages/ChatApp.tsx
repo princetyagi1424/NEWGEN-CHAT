@@ -448,9 +448,9 @@ export default function ChatApp() {
               <button type="button" onClick={() => void signOut()} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" title="Sign out"><LogOut className="h-4 w-4"/></button>
             </div>
           </div>
-          <div className="flex gap-1 px-4 pb-2 sm:px-5">
+          <div className="hidden gap-1 px-4 pb-2 sm:px-5 md:flex">
             {(['chats','stories','requests','profile'] as const).map(tab => (
-              <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize ${activeTab===tab?'bg-emerald-600 text-white':'text-slate-500 hover:bg-slate-100'}`}>{tab}</button>
+              <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-full px-3 py-1.5 text-xs font-bold capitalize transition-all duration-300 ${activeTab===tab?'bg-emerald-600 text-white shadow-sm':'text-slate-500 hover:bg-slate-100'}`}>{tab}</button>
             ))}
           </div>
           {activeTab === 'chats' ? (
@@ -606,6 +606,35 @@ export default function ChatApp() {
           )}
         </main>
       </div>
+      <nav className="newgen-mobile-nav md:hidden" aria-label="Main navigation">
+        {([
+          { id: 'chats', label: 'Chats', Icon: MessageCircle },
+          { id: 'stories', label: 'Stories', Icon: CircleDot },
+          { id: 'requests', label: 'Requests', Icon: Bell },
+          { id: 'profile', label: 'Profile', Icon: UserRound },
+        ] as const).map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            aria-label={label}
+            aria-current={activeTab === id ? 'page' : undefined}
+            onClick={() => {
+              setActiveTab(id)
+              setShowPinSetup(false)
+              if (activeId) leaveConversation()
+            }}
+            className={`newgen-mobile-nav-button flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[11px] font-bold ${activeTab === id ? 'text-emerald-700' : 'text-slate-500'}`}
+          >
+            <span className="newgen-mobile-nav-icon grid h-7 w-8 place-items-center rounded-xl">
+              <Icon className="h-5 w-5" strokeWidth={activeTab === id ? 2.6 : 2} />
+            </span>
+            <span>{label}</span>
+            {id === 'requests' && requests.some(request => request.direction === 'incoming' && request.status === 'pending') && (
+              <span className="sr-only">New incoming requests</span>
+            )}
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }
