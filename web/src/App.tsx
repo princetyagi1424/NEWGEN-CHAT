@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './lib/auth'
 import Landing from './pages/Landing'
 import AuthPage from './pages/AuthPage'
 import ChatApp from './pages/ChatApp'
+import PwaInstallPrompt from './components/PwaInstallPrompt'
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading, configured } = useAuth()
@@ -35,6 +36,8 @@ export default function App() {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        {/* Browser only: hidden automatically when opened as installed PWA */}
+        <PwaInstallPrompt />
       </BrowserRouter>
     </AuthProvider>
   )

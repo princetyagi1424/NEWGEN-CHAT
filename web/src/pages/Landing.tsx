@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
-import PwaInstallPrompt from '../components/PwaInstallPrompt'
 import { useAuth } from '../lib/auth'
-import { MessageCircle, Shield, Smartphone, Zap, Users, Download, Globe, LockKeyhole, Instagram, ArrowUpRight, Sparkles } from 'lucide-react'
+import { MessageCircle, Shield, Smartphone, Users, LockKeyhole, Instagram, ArrowUpRight, Sparkles } from 'lucide-react'
 
 export default function Landing() {
   const { user, configured } = useAuth()
@@ -73,8 +72,8 @@ export default function Landing() {
           </div>
         </section>
       </main>
-      <PwaInstallPrompt />
-      <footer className="border-t border-violet-100 bg-white px-5 py-8 text-center text-xs font-semibold text-slate-400">NEWGEN CHAT · A private space to connect</footer>
+      {/* Extra bottom padding so fixed Install banner does not cover footer */}
+      <footer className="border-t border-violet-100 bg-white px-5 py-8 pb-28 text-center text-xs font-semibold text-slate-400">NEWGEN CHAT · A private space to connect</footer>
     </div>
   )
 }
