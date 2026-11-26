@@ -1,10 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { Camera, ChevronLeft, ChevronRight, Clock3, ImagePlus, LoaderCircle, Plus, Send, ShieldCheck, Sparkles, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ImagePlus, LoaderCircle, Plus, X } from 'lucide-react'
 import { getAuthToken, useAuth } from '../lib/auth'
 
 type StoryAuthor = { id: string; username: string; display_name: string | null; avatar_url: string | null; bio?: string | null }
-type Story = { id: string; user_id: string; story_type: 'text' | 'image'; caption: string; media_url: string | null; created_at: string; expires_at: string; author: StoryAuthor }
+type Story = {
+  id: string
+  user_id: string
+  story_type: 'text' | 'image'
+  caption: string
+  media_url: string | null
+  created_at: string
+  expires_at?: string
+  author: StoryAuthor
+}
 
 async function compressStoryImage(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) throw new Error('Choose an image file.')
@@ -31,21 +40,27 @@ async function compressStoryImage(file: File): Promise<string> {
 }
 
 function Avatar({ author, size = 'h-14 w-14' }: { author: StoryAuthor; size?: string }) {
-  return <span className={size + ' grid shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 text-lg font-black text-emerald-700 ring-2 ring-white'}>{author.avatar_url ? <img src={author.avatar_url} alt="" className="h-full w-full object-cover" /> : (author.display_name || author.username || '?').slice(0, 1).toUpperCase()}</span>
+  return (
+    <span className={size + ' grid shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 text-sm font-black text-emerald-700'}>
+      {author.avatar_url
+        ? <img src={author.avatar_url} alt="" className="h-full w-full object-cover" />
+        : (author.display_name || author.username || '?').slice(0, 1).toUpperCase()}
+    </span>
+  )
 }
 
 export default function StoriesHub() {
   const { user, profile } = useAuth()
   const [stories, setStories] = useState<Story[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [composerOpen, setComposerOpen] = useState(false)
   const [caption, setCaption] = useState('')
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
-  const pickerRef = useRef<HTMLInputElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const apiRequest = useCallback(async (method: 'GET' | 'POST' | 'DELETE', body?: unknown) => {
     const token = getAuthToken()
@@ -87,7 +102,13 @@ export default function StoriesHub() {
       .sort((a, b) => a.id === user?.id ? -1 : b.id === user?.id ? 1 : new Date(b.stories[0].created_at).getTime() - new Date(a.stories[0].created_at).getTime())
   }, [stories, user?.id])
 
-  const flatStories = useMemo(() => groups.flatMap(group => group.stories.map(story => ({ ...story, groupId: group.id }))), [groups])
+  const otherGroups = useMemo(() => groups.filter(g => g.id !== user?.id), [groups, user?.id])
+  const ownGroup = useMemo(() => groups.find(g => g.id === user?.id) || null, [groups, user?.id])
+
+  const flatStories = useMemo(
+    () => groups.flatMap(group => group.stories.map(story => ({ ...story, groupId: group.id }))),
+    [groups],
+  )
   const activeStory = activeIndex === null ? null : flatStories[activeIndex]
 
   async function chooseImage(file?: File) {
@@ -140,71 +161,159 @@ export default function StoriesHub() {
     setError('')
   }
 
+  function openGroup(groupId: string) {
+    const index = flatStories.findIndex(s => s.groupId === groupId)
+    if (index >= 0) setActiveIndex(index)
+  }
+
+  const selfAuthor: StoryAuthor = {
+    id: user?.id || '',
+    username: profile?.username || 'you',
+    display_name: profile?.display_name || profile?.username || 'You',
+    avatar_url: profile?.avatar_url || null,
+  }
+
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
-      <div className="mb-6 flex items-start justify-between gap-3">
-        <div><p className="text-[10px] font-extrabold uppercase tracking-[.2em] text-emerald-600">Your circle</p><h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Stories</h2><p className="mt-1 text-sm text-slate-400">Little moments, shared with your people.</p></div>
-        <button type="button" onClick={() => { setComposerOpen(true); setError('') }} className="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-xs font-extrabold text-white shadow-lg shadow-emerald-100 transition hover:-translate-y-0.5 hover:bg-emerald-700"><Plus className="h-4 w-4" /> Add story</button>
+    <div className="shrink-0 border-b border-slate-100 bg-white px-3 py-3 sm:px-4">
+      <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+        {/* Own story / Add story — Instagram style */}
+        <button
+          type="button"
+          onClick={() => {
+            if (ownGroup) openGroup(ownGroup.id)
+            else { setComposerOpen(true); setError('') }
+          }}
+          className="flex w-[72px] shrink-0 flex-col items-center gap-1.5"
+        >
+          <span className="relative">
+            <span className={`grid place-items-center rounded-full p-[2.5px] ${ownGroup ? 'bg-gradient-to-tr from-emerald-500 via-teal-400 to-orange-400' : 'bg-slate-200'}`}>
+              <span className="rounded-full bg-white p-[2px]">
+                <Avatar author={selfAuthor} size="h-14 w-14" />
+              </span>
+            </span>
+            <span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-emerald-600 text-white">
+              <Plus className="h-3 w-3" strokeWidth={3} />
+            </span>
+          </span>
+          <span className="w-full truncate text-center text-[11px] font-semibold text-slate-700">Your story</span>
+        </button>
+
+        {ownGroup && (
+          <button
+            type="button"
+            onClick={() => { setComposerOpen(true); setError('') }}
+            className="flex w-[72px] shrink-0 flex-col items-center gap-1.5"
+            title="Add another story"
+          >
+            <span className="grid h-[64px] w-[64px] place-items-center rounded-full border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400">
+              <Plus className="h-6 w-6" />
+            </span>
+            <span className="w-full truncate text-center text-[11px] font-semibold text-slate-500">Add</span>
+          </button>
+        )}
+
+        {loading && (
+          <div className="flex items-center gap-2 px-2 text-xs text-slate-400">
+            <LoaderCircle className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        )}
+
+        {!loading && otherGroups.map(group => {
+          const label = group.author.display_name || group.author.username || 'User'
+          return (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => openGroup(group.id)}
+              className="flex w-[72px] shrink-0 flex-col items-center gap-1.5"
+            >
+              <span className="grid place-items-center rounded-full bg-gradient-to-tr from-emerald-500 via-fuchsia-500 to-orange-400 p-[2.5px]">
+                <span className="rounded-full bg-white p-[2px]">
+                  <Avatar author={group.author} size="h-14 w-14" />
+                </span>
+              </span>
+              <span className="w-full truncate text-center text-[11px] font-semibold text-slate-700">{label}</span>
+            </button>
+          )
+        })}
       </div>
 
-      <div className="mb-5 rounded-[24px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-4">
-        <div className="flex items-center gap-3">
-          <div className="relative"><Avatar author={{ id: user?.id || '', username: profile?.username || 'you', display_name: profile?.display_name || 'You', avatar_url: profile?.avatar_url || null }} /><span className="absolute -bottom-1 -right-1 grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-emerald-600 text-white"><Plus className="h-3.5 w-3.5" /></span></div>
-          <div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold text-slate-800">Your story</p><p className="text-xs text-slate-500">Share a photo or a quick thought</p></div>
-          <button type="button" onClick={() => { setComposerOpen(true); setError('') }} className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-50">Create</button>
+      {composerOpen && (
+        <div className="newgen-dialog-backdrop z-[110]" onMouseDown={e => { if (e.target === e.currentTarget) resetComposer() }}>
+          <section role="dialog" aria-modal="true" aria-label="Create story" className="newgen-dialog-panel w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-black text-slate-900">New story</h2>
+              <button type="button" onClick={resetComposer} className="rounded-full p-2 text-slate-400 hover:bg-slate-100" aria-label="Close"><X className="h-5 w-5" /></button>
+            </div>
+            <form onSubmit={e => void publishStory(e)} className="space-y-3">
+              {imagePreview ? (
+                <div className="relative overflow-hidden rounded-2xl bg-slate-100">
+                  <img src={imagePreview} alt="" className="max-h-56 w-full object-contain" />
+                  <button type="button" onClick={() => { setImageDataUrl(null); setImagePreview(null) }} className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5 text-white"><X className="h-4 w-4" /></button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => fileRef.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 py-8 text-slate-500 hover:border-emerald-300 hover:bg-emerald-50/40">
+                  <ImagePlus className="h-8 w-8" />
+                  <span className="text-sm font-bold">Add a photo</span>
+                </button>
+              )}
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => void chooseImage(e.target.files?.[0])} />
+              <textarea
+                value={caption}
+                onChange={e => setCaption(e.target.value)}
+                placeholder="Write a caption…"
+                rows={3}
+                className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-300 focus:bg-white"
+              />
+              {error && <p className="text-xs text-rose-600">{error}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={resetComposer} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button>
+                <button type="submit" disabled={saving} className="flex-1 rounded-2xl bg-emerald-600 py-3 text-sm font-extrabold text-white disabled:opacity-50">{saving ? 'Posting…' : 'Share'}</button>
+              </div>
+            </form>
+          </section>
         </div>
-      </div>
+      )}
 
-      <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-extrabold text-slate-800">From your circle</h3><span className="text-[11px] text-slate-400">24-hour stories</span></div>
-      {loading ? <div className="flex items-center justify-center gap-2 py-10 text-xs font-semibold text-slate-400"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading stories…</div> :
-        groups.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 px-5 py-10 text-center"><div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-emerald-600 shadow-sm"><Camera className="h-5 w-5" /></div><p className="mt-3 text-sm font-bold text-slate-700">Your story space is quiet</p><p className="mx-auto mt-1 max-w-[240px] text-xs leading-5 text-slate-400">Share the first photo or thought. Stories from accepted connections will appear here too.</p></div> :
-        <div className="grid grid-cols-2 gap-3">
-          {groups.map(group => <button key={group.id} type="button" onClick={() => { const index = flatStories.findIndex(item => item.groupId === group.id); if (index >= 0) setActiveIndex(index) }} className="group rounded-[22px] border border-slate-100 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-100 hover:shadow-md">
-            <div className="flex items-center gap-2"><span className="rounded-full bg-gradient-to-tr from-emerald-400 via-teal-400 to-cyan-400 p-[2px]"><Avatar author={group.author} size="h-10 w-10" /></span><span className="min-w-0"><span className="block truncate text-xs font-extrabold text-slate-800">{group.id === user?.id ? 'Your story' : group.author.display_name || group.author.username}</span><span className="block text-[10px] text-slate-400">{group.stories.length} moment{group.stories.length === 1 ? '' : 's'}</span></span></div>
-            <div className="mt-3 h-28 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50">
-              {group.stories[0].media_url ? <img src={group.stories[0].media_url} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> : <div className="flex h-full items-center justify-center px-3 text-center text-sm font-semibold leading-5 text-emerald-800">{group.stories[0].caption}</div>}
+      {activeStory && (
+        <div className="newgen-dialog-backdrop z-[110] !bg-slate-950/90" onMouseDown={e => { if (e.target === e.currentTarget) setActiveIndex(null) }}>
+          <section role="dialog" aria-modal="true" aria-label="Story viewer" className="flex h-[min(820px,calc(100dvh-24px))] w-full max-w-[430px] min-h-0 flex-col overflow-hidden rounded-3xl bg-slate-950 text-white shadow-2xl">
+            <div className="shrink-0 p-4 pb-3">
+              <div className="mb-3 flex gap-1">
+                {groups.find(g => g.id === activeStory.groupId)?.stories.map((_, i) => (
+                  <span key={i} className="h-1 flex-1 rounded-full bg-white/30">
+                    <span className={`block h-full rounded-full ${i <= (groups.find(g => g.id === activeStory.groupId)?.stories.findIndex(s => s.id === activeStory.id) ?? 0) ? 'bg-white' : 'bg-transparent'}`} />
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                <Avatar author={activeStory.author} size="h-10 w-10" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-extrabold">{activeStory.author.display_name || activeStory.author.username}</p>
+                  <p className="text-[11px] text-white/55">{formatDistanceToNow(new Date(activeStory.created_at), { addSuffix: true })}</p>
+                </div>
+                {activeStory.user_id === user?.id && (
+                  <button type="button" onClick={() => void deleteStory(activeStory)} aria-label="Delete story" className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-bold hover:bg-white/25">Delete</button>
+                )}
+                <button type="button" onClick={() => setActiveIndex(null)} aria-label="Close story" className="rounded-full bg-white/15 p-2 hover:bg-white/25"><X className="h-5 w-5" /></button>
+              </div>
             </div>
-            <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-400"><Clock3 className="h-3 w-3" /> {formatDistanceToNow(new Date(group.stories[0].created_at), { addSuffix: true })}</p>
-          </button>)}
-        </div>}
-      {error && !composerOpen && <p role="alert" className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">{error}</p>}
-      <div className="mt-6 rounded-2xl border border-slate-100 bg-white p-3"><p className="flex items-center gap-2 text-[11px] font-bold text-slate-600"><ShieldCheck className="h-4 w-4 text-emerald-600" /> Shared with accepted connections only</p><p className="mt-1 text-[10px] leading-4 text-slate-400">Stories expire after 24 hours. Story content is protected by friend-only access controls, but is not end-to-end encrypted in this browser version.</p></div>
-
-      {composerOpen && <div className="newgen-dialog-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) resetComposer() }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="story-composer-title" className="newgen-dialog-panel max-w-[470px] rounded-[24px] bg-white shadow-2xl">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4 sm:px-6"><div><p className="text-[10px] font-extrabold uppercase tracking-[.18em] text-emerald-600">A little moment</p><h3 id="story-composer-title" className="mt-1 text-lg font-black text-slate-900">Create a story</h3></div><button type="button" onClick={resetComposer} aria-label="Close" className="rounded-full p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>
-          <form onSubmit={publishStory} className="space-y-4 p-6">
-            {imagePreview ? <div className="relative h-56 overflow-hidden rounded-2xl bg-slate-100"><img src={imagePreview} alt="Story preview" className="h-full w-full object-contain" /><button type="button" onClick={() => { setImagePreview(null); setImageDataUrl(null) }} aria-label="Remove photo" className="absolute right-3 top-3 rounded-full bg-slate-950/60 p-2 text-white"><X className="h-4 w-4" /></button></div> : <button type="button" onClick={() => pickerRef.current?.click()} className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/60 px-4 py-8 text-emerald-700 transition hover:bg-emerald-50"><ImagePlus className="h-7 w-7" /><span className="text-sm font-bold">Add a photo</span><span className="text-[10px] text-emerald-600/70">Optional · JPG, PNG or WebP</span></button>}
-            <input ref={pickerRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => { void chooseImage(e.target.files?.[0]); e.currentTarget.value = '' }} />
-            <label className="block space-y-2"><span className="text-xs font-bold text-slate-600">Add a note <span className="font-normal text-slate-400">(optional with a photo)</span></span><textarea rows={3} maxLength={280} value={caption} onChange={e => setCaption(e.target.value)} placeholder="What's happening today?" className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50" /><span className="block text-right text-[10px] text-slate-400">{caption.length}/280</span></label>
-            {error && <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-600">{error}</p>}
-            <div className="flex gap-2"><button type="button" onClick={resetComposer} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button><button type="submit" disabled={saving} className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-100 disabled:opacity-50">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}{saving ? 'Sharing…' : 'Share story'}</button></div>
-          </form>
-        </section>
-      </div>}
-
-      {activeStory && <div className="newgen-dialog-backdrop z-[110] !bg-slate-950/90" onMouseDown={e => { if (e.target === e.currentTarget) setActiveIndex(null) }}>
-        <section role="dialog" aria-modal="true" aria-label="Story viewer" className="flex h-[min(820px,calc(100dvh-24px))] w-full max-w-[430px] min-h-0 flex-col overflow-hidden rounded-[24px] bg-slate-950 text-white shadow-2xl">
-          <div className="shrink-0 p-4 pb-3">
-            <div className="mb-3 flex gap-1">{groups.find(g => g.id === activeStory.groupId)?.stories.map((_, i) => <span key={i} className="h-1 flex-1 rounded-full bg-white/25" />)}</div>
-            <div className="flex items-center gap-3">
-              <Avatar author={activeStory.author} size="h-10 w-10" />
-              <div className="min-w-0 flex-1"><p className="truncate text-sm font-extrabold">{activeStory.author.display_name || activeStory.author.username}</p><p className="text-[10px] text-white/65">{formatDistanceToNow(new Date(activeStory.created_at), { addSuffix: true })}</p></div>
-              {activeStory.user_id === user?.id && <button type="button" onClick={() => void deleteStory(activeStory)} aria-label="Delete story" className="rounded-full bg-white/15 p-2 hover:bg-white/25"><Trash2 className="h-4 w-4" /></button>}
-              <button type="button" onClick={() => setActiveIndex(null)} aria-label="Close story" className="rounded-full bg-white/15 p-2 hover:bg-white/25"><X className="h-4 w-4" /></button>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-950 via-slate-950 to-indigo-950 px-4">
+              {activeStory.media_url
+                ? <img src={activeStory.media_url} alt="Story" className="max-h-full max-w-full object-contain" />
+                : <p className="max-w-sm text-center text-xl font-bold leading-8">{activeStory.caption || 'Story'}</p>}
             </div>
-          </div>
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-950 via-slate-950 to-indigo-950 px-3">
-            {activeStory.media_url ? <img src={activeStory.media_url} alt="Story" className="max-h-full max-w-full object-contain" /> : <p className="max-w-[330px] px-6 text-center text-2xl font-extrabold leading-relaxed">{activeStory.caption}</p>}
-          </div>
-          {activeStory.media_url && activeStory.caption && <div className="shrink-0 px-5 py-3 text-center text-sm font-medium leading-6 text-white/90">{activeStory.caption}</div>}
-          <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-4 py-3">
-            <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.max(0, index - 1))} disabled={activeIndex === 0} aria-label="Previous story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button>
-            <span className="text-xs font-semibold text-white/65">{(activeIndex || 0) + 1} / {flatStories.length}</span>
-            <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.min(flatStories.length - 1, index + 1))} disabled={activeIndex === flatStories.length - 1} aria-label="Next story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
-          </div>
-        </section>
-      </div>}
+            {activeStory.media_url && activeStory.caption && (
+              <div className="shrink-0 px-5 py-3 text-center text-sm font-medium leading-6 text-white/90">{activeStory.caption}</div>
+            )}
+            <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-4 py-3">
+              <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.max(0, index - 1))} disabled={activeIndex === 0} aria-label="Previous story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button>
+              <span className="text-xs font-semibold text-white/65">{(activeIndex || 0) + 1} / {flatStories.length}</span>
+              <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.min(flatStories.length - 1, index + 1))} disabled={activeIndex === flatStories.length - 1} aria-label="Next story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

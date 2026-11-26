@@ -94,78 +94,65 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .newgen-chat-panel {
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 85% 12%, rgb(22 168 121 / 5%), transparent 26%),
-    linear-gradient(145deg, #fbfdfb 0%, #f6faf7 100%);
+    linear-gradient(180deg, #fbfcfb 0%, #f6f9f7 100%);
 }
 .newgen-chat-header {
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-  border-color: #e8eeea;
-  background: rgb(255 255 255 / 96%);
+  flex-shrink: 0;
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 .newgen-message-list {
-  min-width: 0;
   min-height: 0;
-  flex: 1 1 0%;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 .newgen-chat-composer {
-  position: relative;
-  z-index: 1;
   flex-shrink: 0;
-  background: #fff;
+  background: rgb(255 255 255 / 96%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   padding-bottom: max(0px, env(safe-area-inset-bottom));
 }
 .newgen-sidebar button, .newgen-chat-panel button {
-  transition: background-color .18s ease, color .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  touch-action: manipulation;
 }
 .newgen-sidebar button:active, .newgen-chat-panel button:active { transform: scale(.985); }
 .newgen-sidebar input, .newgen-chat-panel input, .newgen-chat-panel textarea {
-  min-width: 0;
-  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+  -webkit-appearance: none;
+  appearance: none;
 }
+.message-enter { animation: message-in .18s ease-out; }
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.pin-mask { letter-spacing: .35em; }
 .newgen-dialog-backdrop {
   position: fixed;
-  z-index: 120;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  z-index: 100;
+  display: grid;
+  place-items: center;
   padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
   background: rgb(15 23 42 / 48%);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .newgen-dialog-panel {
-  width: 100%;
   max-height: calc(100dvh - 24px);
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  overflow: auto;
 }
-.message-enter { animation: message-in .2s cubic-bezier(.2,.8,.2,1); }
-@keyframes message-in {
-  from { opacity: 0; transform: translateY(9px) scale(.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@keyframes typing-dot {
-  0%, 60%, 100% { opacity: .3; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-3px); }
-}
-.typing-dot { animation: typing-dot 1.2s infinite; }
-.typing-dot:nth-child(2) { animation-delay: .15s; }
-.typing-dot:nth-child(3) { animation-delay: .3s; }
-.pin-mask { -webkit-text-security: disc; text-security: disc; }
 
-@media (max-width: 1100px) {
+@media (min-width: 768px) {
   .newgen-sidebar { flex-basis: 330px; width: 330px; }
+}
+@media (min-width: 1280px) {
+  .newgen-sidebar { flex-basis: 360px; width: 360px; }
 }
 @media (max-width: 767px) {
   .newgen-app-shell { padding: 0; background: #fff; }
@@ -196,7 +183,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   }
 }
 
-/* Mobile bottom navigation — isolated to the app's four primary tabs. */
+/* Mobile bottom navigation — isolated to the app's primary tabs. */
 .newgen-mobile-nav { display: none; }
 .newgen-mobile-nav-button {
   min-height: 54px;
@@ -217,24 +204,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 @media (max-width: 767px) {
   .newgen-app-frame {
-    height: calc(100dvh - 76px - env(safe-area-inset-bottom));
+    /* Bottom nav lives inside the sidebar — use full viewport height */
+    height: 100dvh;
   }
-  .newgen-mobile-nav {
-    position: fixed;
-    z-index: 50;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
-    padding: 7px 10px calc(6px + env(safe-area-inset-bottom));
-    border-top: 1px solid rgb(226 232 240 / 90%);
-    background: rgb(255 255 255 / 94%);
-    box-shadow: 0 -8px 28px rgb(15 23 42 / 7%);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-  }
+  /* Legacy external mobile nav (unused) — keep hidden */
+  .newgen-mobile-nav { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .newgen-mobile-nav-button,
