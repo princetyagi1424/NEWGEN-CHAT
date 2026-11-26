@@ -238,7 +238,6 @@ export default function ChatAppInner() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // Keep the message box focused while the chat is unlocked (like WhatsApp / Instagram)
   useEffect(() => {
     if (!isUnlocked || !activeId) return
     const id = window.setTimeout(() => inputRef.current?.focus(), 50)
@@ -414,7 +413,6 @@ export default function ChatAppInner() {
       }
       if (activeIdRef.current === conversationId) setMessages(previous => [...previous, optimistic])
       setInput('')
-      // Keep keyboard / cursor on the composer (WhatsApp / Instagram behaviour)
       requestAnimationFrame(() => inputRef.current?.focus())
       const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(conversationId)}`, { method: 'POST', body: JSON.stringify(encrypted) })
       const saved = result.message as Message | undefined
@@ -494,7 +492,7 @@ export default function ChatAppInner() {
   return (
     <div className="newgen-app-shell relative w-full overflow-hidden text-slate-900">
       {privacyCover && (
-        <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#0f0a1a] text-white" aria-hidden="true">
+        <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#0b1210] text-white" aria-hidden="true">
           <div className="grid h-16 w-16 place-items-center rounded-3xl bg-gradient-to-br from-emerald-600 via-teal-500 to-orange-400 shadow-2xl">
             <Lock className="h-7 w-7" />
           </div>
@@ -506,7 +504,7 @@ export default function ChatAppInner() {
         <aside aria-label="Main navigation and conversations" className={`${activeId || showPinSetup ? 'hidden md:flex' : 'flex'} min-w-0 shrink-0 flex-col bg-white newgen-sidebar`}>
           <div className="newgen-brand-row flex items-center justify-between gap-2 px-4 pb-3 pt-4 sm:px-5">
             <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-500 to-orange-400 text-white shadow-lg shadow-teal-200"><MessageCircle className="h-5 w-5"/></div>
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-500 to-orange-400 text-white shadow-lg shadow-teal-200/80 ring-1 ring-white/30"><MessageCircle className="h-5 w-5"/></div>
               <div><div className="text-[21px] font-black tracking-tight">NEWGEN</div><div className="text-[10px] font-semibold uppercase tracking-[.22em] text-slate-400">Connect privately</div></div>
             </div>
             <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
@@ -521,10 +519,10 @@ export default function ChatAppInner() {
               <div className="px-4 pb-3 pt-2 sm:px-5">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"/>
-                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search people or chats" className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-emerald-300 focus:bg-white"/>
+                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search people or chats" className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50/60"/>
                 </div>
                 {searchResults.length > 0 && (
-                  <div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-lg">
+                  <div className="mt-2 max-h-48 overflow-y-auto rounded-2xl border border-slate-100 bg-white shadow-lg ng-scale-in">
                     {searchResults.map(p => (
                       <button key={p.id} type="button" onClick={() => void (p.is_friend ? startDirectChat(p) : sendConnectionRequest(p))} className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-slate-50">
                         <span className="font-semibold text-slate-800">@{p.username}</span>
@@ -535,29 +533,29 @@ export default function ChatAppInner() {
                 )}
               </div>
               <div className="newgen-sidebar-list px-2 py-2">
-                {visibleConversations.length===0 && <div className="px-7 py-12 text-center"><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-emerald-50 text-emerald-500"><MessageCircle className="h-7 w-7"/></div><p className="text-sm font-bold text-slate-700">Your conversations start here</p><p className="mt-1 text-xs leading-5 text-slate-400">Search a username above to connect and start a private chat.</p></div>}
+                {visibleConversations.length===0 && <div className="px-7 py-12 text-center ng-fade-up"><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-3xl bg-emerald-50 text-emerald-500"><MessageCircle className="h-7 w-7"/></div><p className="text-sm font-bold text-slate-700">Your conversations start here</p><p className="mt-1 text-xs leading-5 text-slate-400">Search a username above to connect and start a private chat.</p></div>}
                 {visibleConversations.map(c => {
                   const name=displayName(c)
                   const online=c.otherProfile ? onlineIds.has(c.otherProfile.id) : false
                   const unread = Number(c.unread_count || 0)
-                  return <button key={c.id} type="button" onClick={() => openConversation(c.id)} className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${activeId===c.id?'bg-emerald-50':'hover:bg-slate-50'}`}>
-                    <span className="relative grid h-[50px] w-[50px] shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-base font-black text-white">{c.otherProfile?.avatar_url ? <img src={c.otherProfile.avatar_url} alt="" className="h-full w-full object-cover" /> : name.slice(0,1).toUpperCase()}<span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-white text-emerald-500"><Lock className="h-3 w-3"/></span>{online && <span className="absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-400"/>}</span>
-                    <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className={`truncate text-sm ${unread>0?'font-extrabold text-slate-900':'font-bold text-slate-800'}`}>{name}</span><span className="flex shrink-0 items-center gap-1.5"><span className="text-[10px] text-slate-400">{c.lastMessage ? formatDistanceToNow(new Date(c.lastMessage.created_at),{addSuffix:false}) : ''}</span>{unread>0 && <span className="min-w-[1.25rem] rounded-full bg-emerald-600 px-1.5 py-0.5 text-center text-[10px] font-black text-white">{unread>99?'99+':unread}</span>}</span></span><span className="mt-1 flex items-center gap-1.5 text-xs text-slate-400"><Lock className="h-3 w-3"/><span className="truncate">{unread>0?`${unread} new message${unread===1?'':'s'}`:(c.type==='group'?'Group · locked':'Private message · locked')}</span></span></span>
+                  return <button key={c.id} type="button" onClick={() => openConversation(c.id)} className={`ng-conv-row group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left ${activeId===c.id?'':'hover:bg-slate-50/80'}`} data-active={activeId===c.id}>
+                    <span className="relative grid h-[50px] w-[50px] shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-base font-black text-white shadow-md shadow-emerald-100">{c.otherProfile?.avatar_url ? <img src={c.otherProfile.avatar_url} alt="" className="h-full w-full object-cover" /> : name.slice(0,1).toUpperCase()}<span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-white text-emerald-500"><Lock className="h-3 w-3"/></span>{online && <span className="absolute right-0 top-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-400"/>}</span>
+                    <span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className={`truncate text-sm ${unread>0?'font-extrabold text-slate-900':'font-bold text-slate-800'}`}>{name}</span><span className="flex shrink-0 items-center gap-1.5"><span className="text-[10px] text-slate-400">{c.lastMessage ? formatDistanceToNow(new Date(c.lastMessage.created_at),{addSuffix:false}) : ''}</span>{unread>0 && <span className="ng-unread min-w-[1.25rem] rounded-full bg-emerald-600 px-1.5 py-0.5 text-center text-[10px] font-black text-white shadow-sm shadow-emerald-200">{unread>99?'99+':unread}</span>}</span></span><span className="mt-1 flex items-center gap-1.5 text-xs text-slate-400"><Lock className="h-3 w-3"/><span className="truncate">{unread>0?`${unread} new message${unread===1?'':'s'}`:(c.type==='group'?'Group · locked':'Private message · locked')}</span></span></span>
                   </button>
                 })}
               </div>
             </>
           ) : activeTab === 'requests' ? (
-            <div className="newgen-sidebar-list space-y-2 px-4 py-3">
+            <div className="newgen-sidebar-list space-y-2 px-4 py-3 ng-fade-up">
               {requests.length===0 && <p className="px-2 py-8 text-center text-sm text-slate-400">No pending requests</p>}
               {requests.map(r => (
-                <div key={r.id} className="rounded-2xl border border-slate-100 p-3">
+                <div key={r.id} className="rounded-2xl border border-slate-100 p-3 transition hover:border-emerald-100 hover:shadow-sm">
                   <div className="text-sm font-bold text-slate-800">@{r.other_username}</div>
                   <div className="mt-1 text-xs text-slate-400">{r.direction === 'incoming' ? 'Wants to connect' : 'Request sent'}</div>
                   <div className="mt-2 flex gap-2">
                     {r.direction === 'incoming' ? (
                       <>
-                        <button type="button" onClick={() => void respondToRequest(r, 'accept')} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">Accept</button>
+                        <button type="button" onClick={() => void respondToRequest(r, 'accept')} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-emerald-200">Accept</button>
                         <button type="button" onClick={() => void respondToRequest(r, 'decline')} className="rounded-lg border px-3 py-1.5 text-xs font-bold text-slate-600">Decline</button>
                       </>
                     ) : (
@@ -568,15 +566,15 @@ export default function ChatAppInner() {
               ))}
             </div>
           ) : (
-            <div className="newgen-sidebar-list px-4 py-3">
+            <div className="newgen-sidebar-list px-4 py-3 ng-fade-up">
               <ProfileEditor />
-              <button type="button" onClick={() => void configurePersonalPin()} className="mt-3 w-full rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-700">Set / Change PIN</button>
+              <button type="button" onClick={() => void configurePersonalPin()} className="mt-3 w-full rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50/40">Set / Change PIN</button>
               <button type="button" onClick={() => void signOutAll()} className="mt-2 w-full rounded-2xl py-3 text-sm font-bold text-rose-600">Sign out all devices</button>
             </div>
           )}
           </div>
 
-          <nav aria-label="Primary" className="mt-auto flex shrink-0 items-stretch justify-around border-t border-slate-100 bg-white px-1 pt-1.5 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+          <nav aria-label="Primary" className="mt-auto flex shrink-0 items-stretch justify-around border-t border-slate-100 bg-white/95 px-1 pt-1.5 pb-[max(0.25rem,env(safe-area-inset-bottom))] backdrop-blur">
             {([
               { id: 'chats' as const, label: 'Chats', Icon: MessageCircle },
               { id: 'requests' as const, label: 'Requests', Icon: Bell },
@@ -585,8 +583,8 @@ export default function ChatAppInner() {
               const active = activeTab === id
               const pending = id === 'requests' && requests.some(r => r.direction === 'incoming' && r.status === 'pending')
               return (
-                <button key={id} type="button" onClick={() => setActiveTab(id)} className={`relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-bold transition ${active ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`}>
-                  <span className={`relative grid h-7 w-7 place-items-center rounded-xl ${active ? 'bg-emerald-50' : ''}`}>
+                <button key={id} type="button" onClick={() => setActiveTab(id)} className={`ng-nav-item relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-bold ${active ? 'text-emerald-600' : 'text-slate-400 hover:text-slate-600'}`} data-active={active}>
+                  <span className={`ng-nav-icon relative grid h-7 w-7 place-items-center rounded-xl ${active ? 'bg-emerald-50' : ''}`}>
                     <Icon className="h-5 w-5" strokeWidth={active ? 2.6 : 2} />
                     {pending && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />}
                   </span>
@@ -601,7 +599,7 @@ export default function ChatAppInner() {
           {showPinSetup ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
               <button type="button" onClick={() => setShowPinSetup(false)} className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4"/> Back</button>
-              <form onSubmit={e => void savePersonalPin(e)} className="mx-auto w-full max-w-md space-y-3 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+              <form onSubmit={e => void savePersonalPin(e)} className="mx-auto w-full max-w-md space-y-3 rounded-3xl border border-slate-100 bg-white p-6 shadow-sm ng-scale-in">
                 <h2 className="text-lg font-black text-slate-900">{hasPersonalPin ? 'Change personal PIN' : 'Set personal PIN'}</h2>
                 {loadingPinSettings && <p className="text-xs text-slate-400">Loading…</p>}
                 <input type="password" inputMode="numeric" value={setupPin} onChange={e => setSetupPin(e.target.value.replace(/\D/g, ''))} placeholder="New PIN (4–12 digits)" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-300"/>
@@ -610,18 +608,18 @@ export default function ChatAppInner() {
                 <input value={setupSecurityAnswer} onChange={e => setSetupSecurityAnswer(e.target.value)} placeholder="Security answer" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-300"/>
                 <input type="password" value={setupCurrentPassword} onChange={e => setSetupCurrentPassword(e.target.value)} placeholder="Or current account password" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-emerald-300"/>
                 {setupPinError && <p className="text-xs text-rose-600">{setupPinError}</p>}
-                <button type="submit" disabled={savingPin} className="w-full rounded-2xl bg-emerald-600 py-3 text-sm font-extrabold text-white disabled:opacity-50">{savingPin ? 'Saving…' : 'Save PIN'}</button>
+                <button type="submit" disabled={savingPin} className="w-full rounded-2xl bg-emerald-600 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-200 disabled:opacity-50">{savingPin ? 'Saving…' : 'Save PIN'}</button>
               </form>
             </div>
           ) : !activeConv ? (
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-5 sm:p-8">
-              <div className="max-w-md text-center"><div className="mx-auto mb-6 grid h-24 w-24 place-items-center rounded-[32px] bg-gradient-to-br from-emerald-100 to-pink-100 text-emerald-600"><MessageCircle className="h-10 w-10"/></div><p className="text-xs font-extrabold uppercase tracking-[.24em] text-emerald-500">Welcome to your private space</p><h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900">Good conversations.<br/>Better boundaries.</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-400">Choose a chat to continue, or find someone new.</p></div>
+              <div className="max-w-md text-center ng-fade-up"><div className="ng-scale-in mx-auto mb-6 grid h-24 w-24 place-items-center rounded-[32px] bg-gradient-to-br from-emerald-100 via-teal-50 to-violet-100 text-emerald-600 shadow-lg shadow-emerald-100/50"><MessageCircle className="h-10 w-10"/></div><p className="text-xs font-extrabold uppercase tracking-[.24em] text-emerald-500">Welcome to your private space</p><h2 className="mt-3 text-3xl font-black tracking-tight text-slate-900">Good conversations.<br/>Better boundaries.</h2><p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-400">Choose a chat to continue, or find someone new.</p></div>
             </div>
           ) : (
             <>
               <header className="newgen-chat-header flex min-h-[72px] shrink-0 items-center gap-3 border-b border-slate-100 px-3 sm:min-h-[76px] sm:px-5 lg:px-7">
                 <button type="button" onClick={leaveConversation} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 md:hidden" aria-label="Back"><ArrowLeft className="h-5 w-5"/></button>
-                <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-lg font-black text-white">{activeConv.otherProfile?.avatar_url ? <img src={activeConv.otherProfile.avatar_url} alt="" className="h-full w-full object-cover" /> : displayName(activeConv).slice(0,1).toUpperCase()}</span>
+                <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 text-lg font-black text-white shadow-md shadow-emerald-100">{activeConv.otherProfile?.avatar_url ? <img src={activeConv.otherProfile.avatar_url} alt="" className="h-full w-full object-cover" /> : displayName(activeConv).slice(0,1).toUpperCase()}</span>
                 <span className="min-w-0 flex-1"><span className="block truncate text-sm font-extrabold text-slate-900">{displayName(activeConv)}</span><span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-400"><span className={`h-1.5 w-1.5 rounded-full ${activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'bg-emerald-400':'bg-slate-300'}`}/>{isUnlocked?'Unlocked on this device':activeConv.otherProfile && onlineIds.has(activeConv.otherProfile.id)?'Online':'Private conversation · locked'}</span></span>
                 <button type="button" onClick={()=>isUnlocked?lockChat():setShowPasskeyDialog(true)} className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-extrabold transition sm:px-4 ${isUnlocked?'bg-emerald-50 text-emerald-700 hover:bg-emerald-100':'bg-emerald-600 text-white shadow-sm shadow-emerald-100 hover:bg-emerald-700'}`}>{isUnlocked?<ShieldCheck className="h-4 w-4"/>:<Lock className="h-4 w-4"/>}<span>{isUnlocked?'Lock':'Unlock'}</span></button>
                 {(activeConv.type === 'group' && (activeConv.created_by === user?.id || activeConv.members?.some(m => m.user_id === user?.id && m.role === 'owner'))) && (
@@ -642,16 +640,16 @@ export default function ChatAppInner() {
                         </div>
                       </div>
                     ))}
-                    {messages.length===0 && <div className="m-auto rounded-3xl bg-white p-8 text-center shadow-sm"><LockKeyhole className="mx-auto h-8 w-8 text-emerald-500"/><p className="mt-3 text-sm font-bold text-slate-700">Your private room</p></div>}
+                    {messages.length===0 && <div className="m-auto rounded-3xl bg-white p-8 text-center shadow-sm ng-scale-in"><LockKeyhole className="mx-auto h-8 w-8 text-emerald-500"/><p className="mt-3 text-sm font-bold text-slate-700">Your private room</p></div>}
                     <div ref={bottomRef}/>
                   </div>
                   <div className="newgen-chat-composer border-t border-slate-100 p-3 pb-[max(.85rem,env(safe-area-inset-bottom))] sm:p-4">
-                    {showPasskeyDialog ? <form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mx-auto max-w-lg space-y-2">
+                    {showPasskeyDialog ? <form onSubmit={e=>{e.preventDefault();void unlockChat()}} className="mx-auto max-w-lg space-y-2 ng-scale-in">
                       <p className="text-center text-sm font-extrabold text-slate-800">Unlock original messages</p>
                       <input type="text" inputMode="numeric" autoComplete="off" value={personalPinEntry} onChange={e=>setPersonalPinEntry(e.target.value.replace(/\D/g,''))} placeholder="Your personal PIN (4–12 digits)" className="pin-mask w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-300"/>
                       {passkeyError&&<p role="alert" className="text-xs text-rose-600">{passkeyError}</p>}
-                      <div className="flex gap-2"><button type="button" onClick={()=>{setShowPasskeyDialog(false);setPersonalPinEntry('');setPasskeyError('')}} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-extrabold text-white">Unlock messages</button></div>
-                    </form> : <button type="button" onClick={()=>setShowPasskeyDialog(true)} className="mx-auto flex w-full max-w-lg items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3.5 text-sm font-extrabold text-white"><LockKeyhole className="h-4 w-4"/> Enter personal PIN to view messages</button>}
+                      <div className="flex gap-2"><button type="button" onClick={()=>{setShowPasskeyDialog(false);setPersonalPinEntry('');setPasskeyError('')}} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="flex-1 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-200">Unlock messages</button></div>
+                    </form> : <button type="button" onClick={()=>setShowPasskeyDialog(true)} className="mx-auto flex w-full max-w-lg items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-emerald-200"><LockKeyhole className="h-4 w-4"/> Enter personal PIN to view messages</button>}
                   </div>
                 </>
               ) : (
@@ -660,7 +658,7 @@ export default function ChatAppInner() {
                     {messages.map(m=>{
                       const mine=m.sender_id===user?.id
                       return <div key={m.id} className={`message-enter group/msg flex ${mine?'justify-end':'justify-start'}`}>
-                        <div className={`relative max-w-[85%] rounded-[22px] px-4 py-3 shadow-sm md:max-w-[68%] ${mine?'rounded-br-md bg-gradient-to-br from-emerald-600 to-teal-600 text-white':'rounded-bl-md border border-slate-100 bg-white text-slate-800'}`}>
+                        <div className={`relative max-w-[85%] rounded-[22px] px-4 py-3 md:max-w-[68%] ${mine?'ng-bubble-mine rounded-br-md bg-gradient-to-br from-emerald-600 to-teal-600 text-white':'ng-bubble-theirs rounded-bl-md border border-slate-100/80 bg-white text-slate-800'}`}>
                           <div className="flex items-start gap-2 text-sm leading-6">{m.locked?<Lock className="mt-1 h-3.5 w-3.5 shrink-0"/>:null}<span className="whitespace-pre-wrap break-words">{m.plaintext??(m.decryptError?'Unable to decrypt':'✦ ✦ ✦ ✦ ✦ ✦')}</span></div>
                           <div className={`mt-1.5 flex items-center justify-end gap-2 text-[10px] ${mine?'text-white/65':'text-slate-400'}`}>
                             {formatDistanceToNow(new Date(m.created_at),{addSuffix:true})}
@@ -673,9 +671,9 @@ export default function ChatAppInner() {
                     <div ref={bottomRef}/>
                   </div>
                   <div className="newgen-chat-composer border-t border-slate-100 px-3 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4 lg:px-7">
-                    <form className="mx-auto flex max-w-5xl items-center gap-2 rounded-[22px] border border-slate-200 bg-slate-50 p-2 focus-within:border-emerald-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-50" onSubmit={e=>{e.preventDefault();void sendMessage()}}>
+                    <form className="mx-auto flex max-w-5xl items-center gap-2 rounded-[22px] border border-slate-200/90 bg-white/90 p-2 shadow-sm shadow-slate-100/80 transition focus-within:border-emerald-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-50/80 focus-within:shadow-md focus-within:shadow-emerald-100/40" onSubmit={e=>{e.preventDefault();void sendMessage()}}>
                       <input ref={inputRef} className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm outline-none placeholder:text-slate-400" placeholder="Write a private message…" value={input} onChange={e=>setInput(e.target.value)} autoFocus enterKeyHint="send" />
-                      <button type="submit" disabled={sending||!input.trim()} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-200 disabled:opacity-40"><Send className="h-4 w-4"/></button>
+                      <button type="submit" disabled={sending||!input.trim()} className="ng-send-btn grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white disabled:opacity-40 disabled:shadow-none"><Send className="h-4 w-4"/></button>
                     </form>
                   </div>
                 </>
