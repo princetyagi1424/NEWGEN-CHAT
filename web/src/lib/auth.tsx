@@ -29,6 +29,43 @@ const API_URL = (((import.meta as any).env?.VITE_API_URL as string | undefined) 
 const TOKEN_KEY = 'newgen_access_token'
 const USER_KEY = 'newgen_user'
 
+function storageGet(key: string): string | null {
+  try {
+    // Prefer localStorage so login survives app close / PWA reinstall.
+    const fromLocal = localStorage.getItem(key)
+    if (fromLocal) return fromLocal
+    // One-time migration from older tab-scoped sessions
+    const fromSession = sessionStorage.getItem(key)
+    if (fromSession) {
+      localStorage.setItem(key, fromSession)
+      sessionStorage.removeItem(key)
+      return fromSession
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+function storageSet(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+    // Clear any leftover session copy so only one source of truth remains
+    sessionStorage.removeItem(key)
+  } catch {
+    /* private mode / quota — ignore */
+  }
+}
+
+function storageRemove(key: string) {
+  try {
+    localStorage.removeItem(key)
+    sessionStorage.removeItem(key)
+  } catch {
+    /* ignore */
+  }
+}
+
 async function authRequest(path: string, body: unknown) {
   const response = await fetch(`${API_URL}${path}`, {
     method: 'POST',
@@ -42,9 +79,11 @@ async function authRequest(path: string, body: unknown) {
 
 function readSavedUser(): AppUser | null {
   try {
-    const raw = sessionStorage.getItem(USER_KEY)
+    const raw = storageGet(USER_KEY)
     return raw ? JSON.parse(raw) as AppUser : null
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -55,10 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const configured = true
 
   useEffect(() => {
-    // Remove credentials written by earlier builds; tokens now remain tab-scoped.
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
-    const token = sessionStorage.getItem(TOKEN_KEY)
+    const token = storageGet(TOKEN_KEY)
     const saved = readSavedUser()
     if (!token || !saved) {
       setLoading(false)
@@ -71,11 +107,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(data.user)
         setProfile(data.profile || null)
         setRealtimeChannelToken(typeof data.realtimeChannelToken === 'string' ? data.realtimeChannelToken : null)
-        sessionStorage.setItem(USER_KEY, JSON.stringify(data.user))
+        storageSet(USER_KEY, JSON.stringify(data.user))
       })
       .catch(() => {
-        sessionStorage.removeItem(TOKEN_KEY)
-        sessionStorage.removeItem(USER_KEY)
+        storageRemove(TOKEN_KEY)
+        storageRemove(USER_KEY)
         setUser(null)
         setProfile(null)
         setRealtimeChannelToken(null)
@@ -89,14 +125,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (password.length < 10) throw new Error('Password must be at least 10 characters.')
       const data = await authRequest('/api/auth/register', { username: username.trim(), password, securityAnswer })
       const nextUser = data.user as AppUser
-      sessionStorage.setItem(TOKEN_KEY, data.token)
-      sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      storageSet(TOKEN_KEY, data.token)
+      storageSet(USER_KEY, JSON.stringify(nextUser))
       setUser(nextUser)
       setProfile(null)
       setRealtimeChannelToken(null)
-      // Register this browser's device identity locally; server-side device-key
-      // registration will be connected with the account security workflow.
-      // Device-key provisioning is local and optional; do not hold up sign-in.
       void getOrCreateDeviceIdentity().catch(() => undefined)
       return { error: null }
     } catch (error) {
@@ -108,12 +141,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await authRequest('/api/auth/login', { username: username.trim(), password })
       const nextUser = data.user as AppUser
-      sessionStorage.setItem(TOKEN_KEY, data.token)
-      sessionStorage.setItem(USER_KEY, JSON.stringify(nextUser))
+      storageSet(TOKEN_KEY, data.token)
+      storageSet(USER_KEY, JSON.stringify(nextUser))
       setUser(nextUser)
       setProfile(null)
       setRealtimeChannelToken(null)
-      // Device-key provisioning is local and optional; do not hold up sign-in.
       void getOrCreateDeviceIdentity().catch(() => undefined)
       return { error: null }
     } catch (error) {
@@ -122,24 +154,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    const token = sessionStorage.getItem(TOKEN_KEY)
+    const token = storageGet(TOKEN_KEY)
     if (token) {
-      // Best-effort server revocation; local sign-out must still complete offline.
       await fetch(`${API_URL}/api/auth/logout`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         keepalive: true,
       }).catch(() => undefined)
     }
-    sessionStorage.removeItem(TOKEN_KEY)
-    sessionStorage.removeItem(USER_KEY)
+    storageRemove(TOKEN_KEY)
+    storageRemove(USER_KEY)
     await clearLocalData().catch(() => undefined)
     setUser(null)
     setProfile(null)
     setRealtimeChannelToken(null)
   }, [])
+
   const signOutAll = useCallback(async () => {
-    const token = sessionStorage.getItem(TOKEN_KEY)
+    const token = storageGet(TOKEN_KEY)
     try {
       if (token) {
         const response = await fetch(`${API_URL}/api/auth/logout-all`, {
@@ -153,17 +185,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
     } finally {
-      sessionStorage.removeItem(TOKEN_KEY)
-      sessionStorage.removeItem(USER_KEY)
+      storageRemove(TOKEN_KEY)
+      storageRemove(USER_KEY)
       await clearLocalData().catch(() => undefined)
       setUser(null)
       setProfile(null)
       setRealtimeChannelToken(null)
     }
   }, [])
+
   const refreshProfile = useCallback(async () => {
-    const token = sessionStorage.getItem(TOKEN_KEY)
-    if (!token) { setProfile(null); setRealtimeChannelToken(null); return }
+    const token = storageGet(TOKEN_KEY)
+    if (!token) {
+      setProfile(null)
+      setRealtimeChannelToken(null)
+      return
+    }
     try {
       const response = await fetch(`${API_URL}/api/me`, {
         headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
@@ -183,11 +220,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Load profile failed:', error)
     }
   }, [user?.id, user?.username])
+
   useEffect(() => {
-    if (!user) { setProfile(null); setRealtimeChannelToken(null); return }
+    if (!user) {
+      setProfile(null)
+      setRealtimeChannelToken(null)
+      return
+    }
     if (profile?.id !== user.id || !realtimeChannelToken) void refreshProfile()
   }, [user?.id, profile?.id, realtimeChannelToken, refreshProfile])
-  const value = useMemo(() => ({ user, profile, realtimeChannelToken, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile }), [user, profile, realtimeChannelToken, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile])
+
+  const value = useMemo(
+    () => ({ user, profile, realtimeChannelToken, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile }),
+    [user, profile, realtimeChannelToken, loading, configured, signUp, signIn, signOut, signOutAll, refreshProfile],
+  )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
@@ -198,5 +244,6 @@ export function useAuth() {
 }
 
 export function getAuthToken() {
-  return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(TOKEN_KEY)
+  if (typeof window === 'undefined') return null
+  return storageGet(TOKEN_KEY)
 }
