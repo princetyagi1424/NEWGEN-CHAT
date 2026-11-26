@@ -5,18 +5,36 @@ import AuthPage from './pages/AuthPage'
 import ChatApp from './pages/ChatApp'
 import PwaInstallPrompt from './components/PwaInstallPrompt'
 
+function LoadingScreen() {
+  return (
+    <div className="min-h-full flex items-center justify-center bg-[var(--bg)]">
+      <div className="text-[var(--muted)]">Loading…</div>
+    </div>
+  )
+}
+
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading, configured } = useAuth()
-  if (loading) {
-    return (
-      <div className="min-h-full flex items-center justify-center bg-[var(--bg)]">
-        <div className="text-[var(--muted)]">Loading…</div>
-      </div>
-    )
-  }
+  if (loading) return <LoadingScreen />
   if (!configured) return <Navigate to="/" replace />
   if (!user) return <Navigate to="/auth" replace />
   return <>{children}</>
+}
+
+/** Home: logged-in users go straight to chat; others see landing. */
+function HomeRoute() {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (user) return <Navigate to="/app" replace />
+  return <Landing />
+}
+
+/** Auth page: already signed in → chat. */
+function AuthRoute() {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (user) return <Navigate to="/app" replace />
+  return <AuthPage />
 }
 
 export default function App() {
@@ -24,8 +42,8 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/" element={<HomeRoute />} />
+          <Route path="/auth" element={<AuthRoute />} />
           <Route
             path="/app/*"
             element={
