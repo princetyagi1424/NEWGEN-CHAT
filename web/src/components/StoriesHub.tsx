@@ -174,9 +174,8 @@ export default function StoriesHub() {
   }
 
   return (
-    <div className="shrink-0 border-b border-slate-100 bg-white px-3 py-3 sm:px-4">
+    <div className="ng-fade-up shrink-0 border-b border-slate-100/90 bg-gradient-to-b from-white to-slate-50/40 px-3 py-3 sm:px-4">
       <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
-        {/* Own story / Add story — Instagram style */}
         <button
           type="button"
           onClick={() => {
@@ -186,12 +185,12 @@ export default function StoriesHub() {
           className="flex w-[72px] shrink-0 flex-col items-center gap-1.5"
         >
           <span className="relative">
-            <span className={`grid place-items-center rounded-full p-[2.5px] ${ownGroup ? 'bg-gradient-to-tr from-emerald-500 via-teal-400 to-orange-400' : 'bg-slate-200'}`}>
+            <span className={`grid place-items-center rounded-full p-[2.5px] ${ownGroup ? 'ng-story-ring' : 'bg-slate-200'}`}>
               <span className="rounded-full bg-white p-[2px]">
                 <Avatar author={selfAuthor} size="h-14 w-14" />
               </span>
             </span>
-            <span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-emerald-600 text-white">
+            <span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-white bg-emerald-600 text-white shadow-sm shadow-emerald-200">
               <Plus className="h-3 w-3" strokeWidth={3} />
             </span>
           </span>
@@ -205,7 +204,7 @@ export default function StoriesHub() {
             className="flex w-[72px] shrink-0 flex-col items-center gap-1.5"
             title="Add another story"
           >
-            <span className="grid h-[64px] w-[64px] place-items-center rounded-full border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400">
+            <span className="grid h-[64px] w-[64px] place-items-center rounded-full border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400 transition hover:border-emerald-300 hover:text-emerald-600">
               <Plus className="h-6 w-6" />
             </span>
             <span className="w-full truncate text-center text-[11px] font-semibold text-slate-500">Add</span>
@@ -225,9 +224,9 @@ export default function StoriesHub() {
               key={group.id}
               type="button"
               onClick={() => openGroup(group.id)}
-              className="flex w-[72px] shrink-0 flex-col items-center gap-1.5"
+              className="flex w-[72px] shrink-0 flex-col items-center gap-1.5 transition active:scale-95"
             >
-              <span className="grid place-items-center rounded-full bg-gradient-to-tr from-emerald-500 via-fuchsia-500 to-orange-400 p-[2.5px]">
+              <span className="ng-story-ring grid place-items-center rounded-full p-[2.5px]">
                 <span className="rounded-full bg-white p-[2px]">
                   <Avatar author={group.author} size="h-14 w-14" />
                 </span>
@@ -252,7 +251,7 @@ export default function StoriesHub() {
                   <button type="button" onClick={() => { setImageDataUrl(null); setImagePreview(null) }} className="absolute right-2 top-2 rounded-full bg-black/50 p-1.5 text-white"><X className="h-4 w-4" /></button>
                 </div>
               ) : (
-                <button type="button" onClick={() => fileRef.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 py-8 text-slate-500 hover:border-emerald-300 hover:bg-emerald-50/40">
+                <button type="button" onClick={() => fileRef.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 py-8 text-slate-500 transition hover:border-emerald-300 hover:bg-emerald-50/40">
                   <ImagePlus className="h-8 w-8" />
                   <span className="text-sm font-bold">Add a photo</span>
                 </button>
@@ -268,7 +267,7 @@ export default function StoriesHub() {
               {error && <p className="text-xs text-rose-600">{error}</p>}
               <div className="flex gap-2">
                 <button type="button" onClick={resetComposer} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button>
-                <button type="submit" disabled={saving} className="flex-1 rounded-2xl bg-emerald-600 py-3 text-sm font-extrabold text-white disabled:opacity-50">{saving ? 'Posting…' : 'Share'}</button>
+                <button type="submit" disabled={saving} className="flex-1 rounded-2xl bg-emerald-600 py-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-200 disabled:opacity-50">{saving ? 'Posting…' : 'Share'}</button>
               </div>
             </form>
           </section>
@@ -309,7 +308,7 @@ export default function StoriesHub() {
             <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-4 py-3">
               <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.max(0, index - 1))} disabled={activeIndex === 0} aria-label="Previous story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button>
               <span className="text-xs font-semibold text-white/65">{(activeIndex || 0) + 1} / {flatStories.length}</span>
-              <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.min(flatStories.length - 1, index + 1))} disabled={activeIndex === flatStories.length - 1} aria-label="Next story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
+              <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.min(flatStories.length - 1, index + 1))} disabled={activeIndex === === flatStories.length - 1} aria-label="Next story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
             </div>
           </section>
         </div>

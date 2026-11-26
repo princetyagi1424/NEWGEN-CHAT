@@ -2,28 +2,24 @@
 
 :root {
   color-scheme: light;
-  --bg: #f4f7f5;
+  --bg: #f3f6f4;
   --panel: #ffffff;
   --panel-2: #f7faf8;
-  --border: #e7eeea;
-  --text: #17251f;
-  --muted: #829089;
-  --accent: #159b72;
-  --accent-hover: #0f805f;
-  --success: #16a879;
-  --danger: #dc4268;
-  --warning: #c88728;
-  --brand-violet: #7652e8;
-  --brand-pink: #e34d9a;
-  --brand-orange: #ff9b55;
+  --border: #e5ece8;
+  --text: #0f1f1a;
+  --muted: #7a8f86;
+  --accent: #0f9f74;
+  --accent-hover: #0c845f;
+  --success: #12a87a;
+  --danger: #e11d48;
+  --warning: #d97706;
+  --shadow-soft: 0 10px 40px rgb(15 40 32 / 8%);
+  --shadow-glow: 0 8px 28px rgb(15 159 116 / 18%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 * { box-sizing: border-box; }
-html {
-  width: 100%;
-  height: 100%;
-}
+html { width: 100%; height: 100%; }
 body {
   width: 100%;
   min-height: 100%;
@@ -35,54 +31,55 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
-#root {
-  width: 100%;
-  min-height: 100%;
-  min-height: 100dvh;
-}
+#root { width: 100%; min-height: 100%; min-height: 100dvh; }
 button, input, textarea { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
-  outline: 3px solid rgb(21 155 114 / 25%);
+  outline: 3px solid rgb(15 159 116 / 22%);
   outline-offset: 2px;
 }
-::selection { background: rgb(21 155 114 / 18%); color: #123e32; }
-::-webkit-scrollbar { width: 7px; height: 7px; }
+::selection { background: rgb(15 159 116 / 16%); color: #0a3d2e; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d7e2dc; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #b7c9bf; }
+::-webkit-scrollbar-thumb { background: #d0ddd6; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #b3c5bb; }
 
-/* Dashboard: one stable two-column workspace with independently scrollable panes. */
 .newgen-app-shell {
   height: 100dvh;
   min-height: 100dvh;
   min-height: 0;
-  padding: 12px;
+  padding: 14px;
   background:
-    radial-gradient(ellipse at 8% 0%, rgb(22 168 121 / 8%), transparent 34%),
-    radial-gradient(ellipse at 92% 100%, rgb(62 126 112 / 7%), transparent 38%),
-    #f2f6f3;
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgb(15 159 116 / 12%), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgb(99 102 241 / 8%), transparent 45%),
+    linear-gradient(165deg, #eef5f1 0%, #f6f8f7 40%, #f0f4f2 100%);
   overflow: hidden;
 }
 .newgen-app-frame {
   height: 100%;
   min-height: 0;
-  border: 1px solid rgb(224 234 228 / 95%);
-  border-radius: 24px;
-  box-shadow: 0 20px 65px rgb(30 56 44 / 9%);
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 28px;
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 80%) inset,
+    0 24px 80px rgb(15 40 32 / 10%);
   overflow: hidden;
+  background: #fff;
 }
 .newgen-sidebar {
-  /* No display here: the JSX toggles `hidden md:flex` / `flex`. */
   flex: 0 0 360px;
   width: 360px;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid #e8eeea;
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff 0%, #fafcfb 100%);
 }
-.newgen-brand-row { min-height: 76px; flex-shrink: 0; }
+.newgen-brand-row {
+  min-height: 76px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #fff 60%, transparent);
+}
 .newgen-sidebar-list {
   min-height: 0;
   flex: 1 1 0%;
@@ -96,13 +93,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   min-height: 0;
   overflow: hidden;
   background:
-    linear-gradient(180deg, #fbfcfb 0%, #f6f9f7 100%);
+    radial-gradient(ellipse 70% 40% at 50% 0%, rgb(15 159 116 / 4%), transparent 55%),
+    linear-gradient(180deg, #fbfcfb 0%, #f4f8f6 100%);
 }
 .newgen-chat-header {
   flex-shrink: 0;
-  background: rgb(255 255 255 / 92%);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgb(255 255 255 / 88%);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border-bottom: 1px solid rgb(232 238 234 / 90%);
 }
 .newgen-message-list {
   min-height: 0;
@@ -113,25 +112,102 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .newgen-chat-composer {
   flex-shrink: 0;
-  background: rgb(255 255 255 / 96%);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   padding-bottom: max(0px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgb(232 238 234 / 80%);
 }
-.newgen-sidebar button, .newgen-chat-panel button {
-  touch-action: manipulation;
-}
-.newgen-sidebar button:active, .newgen-chat-panel button:active { transform: scale(.985); }
+.newgen-sidebar button, .newgen-chat-panel button { touch-action: manipulation; }
+.newgen-sidebar button:active, .newgen-chat-panel button:active { transform: scale(.98); }
 .newgen-sidebar input, .newgen-chat-panel input, .newgen-chat-panel textarea {
   -webkit-appearance: none;
   appearance: none;
 }
-.message-enter { animation: message-in .18s ease-out; }
+.pin-mask { letter-spacing: .35em; }
+
 @keyframes message-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.pin-mask { letter-spacing: .35em; }
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes soft-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(15 159 116 / 0%); }
+  50% { box-shadow: 0 0 0 6px rgb(15 159 116 / 12%); }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes ring-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes tab-pop {
+  0% { opacity: .65; transform: translateY(3px) scale(.78); }
+  65% { opacity: 1; transform: translateY(-2px) scale(1.1); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.message-enter {
+  animation: message-in .28s cubic-bezier(.22, 1, .36, 1) both;
+}
+.ng-fade-up {
+  animation: fade-up .35s cubic-bezier(.22, 1, .36, 1) both;
+}
+.ng-scale-in {
+  animation: scale-in .3s cubic-bezier(.22, 1, .36, 1) both;
+}
+.ng-story-ring {
+  background: conic-gradient(from 210deg, #10b981, #a855f7, #f97316, #10b981);
+  animation: ring-spin 8s linear infinite;
+}
+.ng-story-ring-static {
+  background: linear-gradient(135deg, #10b981, #a855f7 50%, #f97316);
+}
+
+.ng-conv-row {
+  transition: background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.ng-conv-row:hover {
+  background: #f3faf7 !important;
+}
+.ng-conv-row[data-active="true"] {
+  background: linear-gradient(135deg, #ecfdf5, #f0fdfa) !important;
+  box-shadow: inset 3px 0 0 #10b981;
+}
+
+.ng-send-btn {
+  transition: transform .18s ease, box-shadow .18s ease, opacity .15s ease;
+  box-shadow: 0 6px 16px rgb(15 159 116 / 28%);
+}
+.ng-send-btn:not(:disabled):hover {
+  transform: scale(1.06);
+  box-shadow: 0 8px 22px rgb(15 159 116 / 36%);
+}
+.ng-send-btn:not(:disabled):active { transform: scale(.96); }
+
+.ng-bubble-mine {
+  box-shadow: 0 4px 14px rgb(15 159 116 / 22%);
+}
+.ng-bubble-theirs {
+  box-shadow: 0 2px 10px rgb(15 23 42 / 5%);
+}
+
+.ng-nav-item {
+  transition: color .2s ease;
+}
+.ng-nav-item[data-active="true"] .ng-nav-icon {
+  background: linear-gradient(135deg, rgb(16 185 129 / 16%), rgb(20 184 166 / 12%));
+  animation: tab-pop .28s cubic-bezier(.2,.8,.2,1);
+}
+
 .newgen-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -140,19 +216,32 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   place-items: center;
   padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
   background: rgb(15 23 42 / 48%);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fade-up .2s ease both;
 }
 .newgen-dialog-panel {
   max-height: calc(100dvh - 24px);
   overflow: auto;
+  animation: scale-in .28s cubic-bezier(.22, 1, .36, 1) both;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 25%);
+}
+
+.ng-unread {
+  animation: soft-pulse 2.2s ease-in-out infinite;
+}
+
+.ng-shimmer {
+  background: linear-gradient(90deg, #f1f5f3 25%, #e8efeb 50%, #f1f5f3 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
 }
 
 @media (min-width: 768px) {
-  .newgen-sidebar { flex-basis: 330px; width: 330px; }
+  .newgen-sidebar { flex-basis: 340px; width: 340px; }
 }
 @media (min-width: 1280px) {
-  .newgen-sidebar { flex-basis: 360px; width: 360px; }
+  .newgen-sidebar { flex-basis: 380px; width: 380px; }
 }
 @media (max-width: 767px) {
   .newgen-app-shell { padding: 0; background: #fff; }
@@ -160,6 +249,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     border: 0;
     border-radius: 0;
     box-shadow: none;
+    height: 100dvh;
   }
   .newgen-sidebar {
     flex: 1 1 100%;
@@ -173,6 +263,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .newgen-chat-header { padding-left: 12px; padding-right: 12px; }
   .newgen-message-list { scrollbar-gutter: auto; }
   .newgen-dialog-panel { max-height: calc(100dvh - 20px); }
+  .newgen-mobile-nav { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -181,37 +272,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+  .ng-story-ring { animation: none; }
 }
 
-/* Mobile bottom navigation — isolated to the app's primary tabs. */
 .newgen-mobile-nav { display: none; }
-.newgen-mobile-nav-button {
-  min-height: 54px;
-  border: 1px solid transparent;
-  -webkit-tap-highlight-color: transparent;
-  transition: color .22s ease, background-color .22s ease, transform .22s ease, border-color .22s ease;
-}
-.newgen-mobile-nav-button:active { transform: scale(.94); }
-.newgen-mobile-nav-button[aria-current="page"] .newgen-mobile-nav-icon {
-  background: linear-gradient(135deg, rgb(16 185 129 / 15%), rgb(20 184 166 / 13%));
-  animation: newgen-tab-pop .28s cubic-bezier(.2,.8,.2,1);
-}
-.newgen-mobile-nav-icon { transition: background-color .22s ease, transform .22s ease; }
-@keyframes newgen-tab-pop {
-  0% { opacity: .65; transform: translateY(3px) scale(.78); }
-  65% { opacity: 1; transform: translateY(-2px) scale(1.12); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-@media (max-width: 767px) {
-  .newgen-app-frame {
-    /* Bottom nav lives inside the sidebar — use full viewport height */
-    height: 100dvh;
-  }
-  /* Legacy external mobile nav (unused) — keep hidden */
-  .newgen-mobile-nav { display: none !important; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .newgen-mobile-nav-button,
-  .newgen-mobile-nav-icon { transition: none; }
-  .newgen-mobile-nav-button[aria-current="page"] .newgen-mobile-nav-icon { animation: none; }
-}
