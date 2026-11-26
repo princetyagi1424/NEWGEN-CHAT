@@ -1,7 +1,7 @@
-/* NEWGEN CHAT service worker — installable PWA shell */
+/* NEWGEN CHAT service worker — installable PWA shell + notifications */
 const CACHE_PREFIX = 'newgen-chat-pwa';
-const SHELL_CACHE = CACHE_PREFIX + '-shell-v5';
-const ASSET_CACHE = CACHE_PREFIX + '-assets-v5';
+const SHELL_CACHE = CACHE_PREFIX + '-shell-v6';
+const ASSET_CACHE = CACHE_PREFIX + '-assets-v6';
 const SHELL_URLS = [
   '/',
   '/index.html',
@@ -9,7 +9,9 @@ const SHELL_URLS = [
   '/favicon.svg',
   '/apple-touch-icon.png',
   '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/icons/icon-512.png',
+  '/icons/icon-192-maskable.png',
+  '/icons/icon-512-maskable.png'
 ];
 
 self.addEventListener('install', event => {
@@ -39,7 +41,6 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never cache or intercept API / auth / realtime
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/auth/v1/') ||
@@ -50,7 +51,6 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // App shell for all navigations (required for reliable install + offline open)
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
@@ -92,4 +92,42 @@ self.addEventListener('fetch', event => {
       return cached || Response.error();
     }
   })());
+});
+
+// Open the app when user taps a notification
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = '/app';
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of all) {
+      if ('focus' in client) {
+        await client.focus();
+        if ('navigate' in client) {
+          try { await client.navigate(target); } catch { /* ignore */ }
+        }
+        return;
+      }
+    }
+    if (self.clients.openWindow) {
+      await self.clients.openWindow(target);
+    }
+  })());
+});
+
+// Allow the page to ask the SW to show a notification (more reliable on some mobile browsers)
+self.addEventListener('message', event => {
+  const data = event.data || {};
+  if (data.type === 'SHOW_NOTIFICATION' && data.title) {
+    event.waitUntil(
+      self.registration.showNotification(data.title, {
+        body: data.body || 'New message',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: data.tag || 'newgen-message',
+        renotify: true,
+        data: { url: data.url || '/app' },
+      })
+    );
+  }
 });

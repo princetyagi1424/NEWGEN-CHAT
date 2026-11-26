@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "icons": "node scripts/write-pwa-icons.mjs",
+    "dev": "node scripts/write-pwa-icons.mjs && vite",
+    "build": "node scripts/write-pwa-icons.mjs && vite build",
     "preview": "vite preview",
     "dev:vercel": "vercel dev",
     "typecheck": "tsc -b"
