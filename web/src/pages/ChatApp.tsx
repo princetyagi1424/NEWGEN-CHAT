@@ -50,6 +50,8 @@ export default function ChatApp() {
   const [savingPin, setSavingPin] = useState(false)
   const [creatingChat, setCreatingChat] = useState(false)
   const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'requests' | 'profile'>('chats')
+  // Full-screen privacy cover so recent-apps / multitasking thumbnails never show plaintext
+  const [privacyCover, setPrivacyCover] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const messageRequestVersion = useRef(0)
   const messagesRef = useRef<VisibleMessage[]>([])
@@ -199,7 +201,7 @@ export default function ChatApp() {
         handlers.messages()
         handlers.conversations()
         const conversationId = typeof payload.conversation_id === 'string' ? payload.conversation_id : ''
-        const fromName = typeof payload.from_username === 'string' ? payload.from_username : 'NEWGEN'
+        const fromName = typeof payload.from_.from_username === 'string' ? payload.from_username : 'NEWGEN'
         if (conversationId && conversationId !== activeIdRef.current) {
           setConversations(previous => previous.map(c =>
             c.id === conversationId
@@ -260,14 +262,36 @@ export default function ChatApp() {
   }, [conversations])
 
   useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState !== 'visible') lockChat()
+    // Mask the entire UI immediately when the app is backgrounded so the OS
+    // recent-apps / app-switcher snapshot shows only the privacy cover —
+    // not unlocked chat content. This is the core privacy differentiator.
+    const mask = () => {
+      setPrivacyCover(true)
+      lockChat()
     }
-    const onPageHide = () => lockChat()
+    const unmask = () => {
+      // Small delay so a fast app-switcher glance still captures the cover
+      window.setTimeout(() => {
+        if (document.visibilityState === 'visible' && document.hasFocus()) {
+          setPrivacyCover(false)
+        }
+      }, 120)
+    }
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') mask()
+      else unmask()
+    }
+    const onBlur = () => mask()
+    const onFocus = () => unmask()
+    const onPageHide = () => mask()
     window.addEventListener('pagehide', onPageHide)
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
       window.removeEventListener('pagehide', onPageHide)
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [lockChat])
@@ -479,6 +503,7 @@ export default function ChatApp() {
   }
 
   function leaveConversation() {
+    // Immediately clear unlocked content so no plaintext remains on screen
     setPasskey(null)
     setPersonalPinEntry('')
     setPasskeyError('')
@@ -489,7 +514,20 @@ export default function ChatApp() {
   }
 
   return (
-    <div className="newgen-app-shell w-full overflow-hidden text-slate-900">
+    <div className="newgen-app-shell relative w-full overflow-hidden text-slate-900">
+      {privacyCover && (
+        <div
+          className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-[#0f0a1a] text-white"
+          aria-hidden="true"
+          style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+        >
+          <div className="grid h-16 w-16 place-items-center rounded-3xl bg-gradient-to-br from-emerald-600 via-teal-500 to-orange-400 shadow-2xl shadow-emerald-900/40">
+            <Lock className="h-7 w-7" />
+          </div>
+          <p className="mt-5 text-lg font-black tracking-tight">NEWGEN CHAT</p>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-[.2em] text-white/50">Private · Locked</p>
+        </div>
+      )}
       <div className="newgen-app-frame mx-auto flex w-full max-w-[1600px] min-w-0 overflow-hidden bg-white">
         <aside aria-label="Main navigation and conversations" className={`${activeId || showPinSetup ? 'hidden md:flex' : 'flex'} min-w-0 shrink-0 flex-col bg-white newgen-sidebar`}>
           <div className="newgen-brand-row flex items-center justify-between gap-2 px-4 pb-3 pt-4 sm:px-5">
