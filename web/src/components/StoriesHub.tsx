@@ -198,12 +198,7 @@ export default function StoriesHub() {
         </button>
 
         {ownGroup && (
-          <button
-            type="button"
-            onClick={() => { setComposerOpen(true); setError('') }}
-            className="flex w-[72px] shrink-0 flex-col items-center gap-1.5"
-            title="Add another story"
-          >
+          <button type="button" onClick={() => { setComposerOpen(true); setError('') }} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5" title="Add another story">
             <span className="grid h-[64px] w-[64px] place-items-center rounded-full border-2 border-dashed border-slate-300 bg-slate-50 text-slate-400 transition hover:border-emerald-300 hover:text-emerald-600">
               <Plus className="h-6 w-6" />
             </span>
@@ -220,12 +215,7 @@ export default function StoriesHub() {
         {!loading && otherGroups.map(group => {
           const label = group.author.display_name || group.author.username || 'User'
           return (
-            <button
-              key={group.id}
-              type="button"
-              onClick={() => openGroup(group.id)}
-              className="flex w-[72px] shrink-0 flex-col items-center gap-1.5 transition active:scale-95"
-            >
+            <button key={group.id} type="button" onClick={() => openGroup(group.id)} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5 transition active:scale-95">
               <span className="ng-story-ring grid place-items-center rounded-full p-[2.5px]">
                 <span className="rounded-full bg-white p-[2px]">
                   <Avatar author={group.author} size="h-14 w-14" />
@@ -257,13 +247,7 @@ export default function StoriesHub() {
                 </button>
               )}
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => void chooseImage(e.target.files?.[0])} />
-              <textarea
-                value={caption}
-                onChange={e => setCaption(e.target.value)}
-                placeholder="Write a caption…"
-                rows={3}
-                className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-300 focus:bg-white"
-              />
+              <textarea value={caption} onChange={e => setCaption(e.target.value)} placeholder="Write a caption…" rows={3} className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-emerald-300 focus:bg-white" />
               {error && <p className="text-xs text-rose-600">{error}</p>}
               <div className="flex gap-2">
                 <button type="button" onClick={resetComposer} className="flex-1 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-600">Cancel</button>
@@ -308,7 +292,7 @@ export default function StoriesHub() {
             <div className="flex shrink-0 items-center justify-between border-t border-white/10 px-4 py-3">
               <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.max(0, index - 1))} disabled={activeIndex === 0} aria-label="Previous story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button>
               <span className="text-xs font-semibold text-white/65">{(activeIndex || 0) + 1} / {flatStories.length}</span>
-              <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.min(flatStories.length - 1, index + 1))} disabled={activeIndex === === flatStories.length - 1} aria-label="Next story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
+              <button type="button" onClick={() => setActiveIndex(index => index === null ? null : Math.min(flatStories.length - 1, index + 1))} disabled={activeIndex === flatStories.length - 1} aria-label="Next story" className="rounded-full bg-white/15 p-3 hover:bg-white/25 disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
             </div>
           </section>
         </div>
