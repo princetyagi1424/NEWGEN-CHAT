@@ -52,6 +52,7 @@ export default function ChatAppInner() {
   const [activeTab, setActiveTab] = useState<'chats' | 'requests' | 'profile'>('chats')
   const [privacyCover, setPrivacyCover] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const messageRequestVersion = useRef(0)
   const messagesRef = useRef<VisibleMessage[]>([])
   messagesRef.current = messages
@@ -237,6 +238,13 @@ export default function ChatAppInner() {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
+  // Keep the message box focused while the chat is unlocked (like WhatsApp / Instagram)
+  useEffect(() => {
+    if (!isUnlocked || !activeId) return
+    const id = window.setTimeout(() => inputRef.current?.focus(), 50)
+    return () => window.clearTimeout(id)
+  }, [isUnlocked, activeId])
+
   useEffect(() => {
     const total = conversations.reduce((sum, c) => sum + Number(c.unread_count || 0), 0)
     document.title = total > 0 ? `(${total > 99 ? '99+' : total}) NEWGEN CHAT` : 'NEWGEN CHAT'
@@ -406,6 +414,8 @@ export default function ChatAppInner() {
       }
       if (activeIdRef.current === conversationId) setMessages(previous => [...previous, optimistic])
       setInput('')
+      // Keep keyboard / cursor on the composer (WhatsApp / Instagram behaviour)
+      requestAnimationFrame(() => inputRef.current?.focus())
       const result = await apiRequest(`/api/messages?conversation_id=${encodeURIComponent(conversationId)}`, { method: 'POST', body: JSON.stringify(encrypted) })
       const saved = result.message as Message | undefined
       if (!saved?.id) throw new Error('The message was not confirmed by the server.')
@@ -425,7 +435,10 @@ export default function ChatAppInner() {
         setInput(previous => previous || textToSend)
       }
       alert(error instanceof Error ? error.message : 'Message could not be sent')
-    } finally { setSending(false) }
+    } finally {
+      setSending(false)
+      requestAnimationFrame(() => inputRef.current?.focus())
+    }
   }
 
   async function deleteMessage(messageId: string) {
@@ -661,7 +674,7 @@ export default function ChatAppInner() {
                   </div>
                   <div className="newgen-chat-composer border-t border-slate-100 px-3 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4 lg:px-7">
                     <form className="mx-auto flex max-w-5xl items-center gap-2 rounded-[22px] border border-slate-200 bg-slate-50 p-2 focus-within:border-emerald-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-50" onSubmit={e=>{e.preventDefault();void sendMessage()}}>
-                      <input className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm outline-none placeholder:text-slate-400" placeholder="Write a private message…" value={input} onChange={e=>setInput(e.target.value)} disabled={sending}/>
+                      <input ref={inputRef} className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm outline-none placeholder:text-slate-400" placeholder="Write a private message…" value={input} onChange={e=>setInput(e.target.value)} autoFocus enterKeyHint="send" />
                       <button type="submit" disabled={sending||!input.trim()} className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-200 disabled:opacity-40"><Send className="h-4 w-4"/></button>
                     </form>
                   </div>
